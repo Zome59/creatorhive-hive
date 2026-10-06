@@ -29,15 +29,16 @@ for (let attempt = 0; FLOWERS.length < 28 && attempt < 4000; attempt++) {
 }
 
 // Simple collision volumes. Cylinders stand on the ground; spheres float (canopies, flower heads).
+// `owner` names the tree or flower, so a toppled one can be ignored until it stands up again.
 export const OBSTACLES = Object.freeze([
-  { kind: 'hive', shape: 'cylinder', x: 0, z: 0, r: WORLD.hive.radius, bottom: 0, top: WORLD.hive.height },
+  { kind: 'hive', owner: 'hive', shape: 'cylinder', x: 0, z: 0, r: WORLD.hive.radius, bottom: 0, top: WORLD.hive.height },
   ...TREES.filter(t => t.inside).flatMap(t => [
-    { kind: 'tree', shape: 'cylinder', x: t.x, z: t.z, r: 0.32, bottom: 0, top: t.height + 0.4 },
-    { kind: 'tree', shape: 'sphere', x: t.x, y: t.height + 0.9, z: t.z, r: t.canopy },
+    { kind: 'tree', owner: `tree:${t.id}`, shape: 'cylinder', x: t.x, z: t.z, r: 0.32, bottom: 0, top: t.height + 0.4 },
+    { kind: 'tree', owner: `tree:${t.id}`, shape: 'sphere', x: t.x, y: t.height + 0.9, z: t.z, r: t.canopy },
   ]),
   ...FLOWERS.flatMap(f => [
-    { kind: 'flower', shape: 'cylinder', x: f.x, z: f.z, r: f.head > 0.6 ? 0.16 : 0.1, bottom: 0, top: f.height },
-    { kind: 'flower', shape: 'sphere', x: f.x, y: f.height, z: f.z, r: f.head * 0.8 },
+    { kind: 'flower', owner: `flower:${f.id}`, shape: 'cylinder', x: f.x, z: f.z, r: f.head > 0.6 ? 0.16 : 0.1, bottom: 0, top: f.height },
+    { kind: 'flower', owner: `flower:${f.id}`, shape: 'sphere', x: f.x, y: f.height, z: f.z, r: f.head * 0.8 },
   ]),
 ]);
 

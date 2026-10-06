@@ -3,6 +3,7 @@
 //   RUNWARE_API_KEY=... node tools/generate-hive-sounds.mjs            fetch missing raw clips, then encode
 //   RUNWARE_API_KEY=... node tools/generate-hive-sounds.mjs --explore buzz --seeds 1,3,5
 //   node tools/generate-hive-sounds.mjs --encode-only                  re-encode from cached raw clips
+//   node tools/generate-hive-sounds.mjs --encode-only --only buzz,pass  limit to some files
 //
 // The key is read from the environment and never written anywhere. Raw WAV downloads stay in the
 // git-ignored `.cache/hive-sounds/`; only the small, processed MP3 files in public/ are committed.
@@ -18,6 +19,8 @@ const output = resolve(root, 'public/games/hive/audio');
 const RATE = 44100;
 const MODEL = 'mirelo:1@1'; // Mirelo SFX 1.5, text-to-audio, via Runware
 const VOICE = 'bytedance:seed-audio@1.0'; // Seed Audio 1.0 for the comic gibberish voices
+const MUSIC = 'minimax:music@2.6'; // MiniMax Music 2.6 for the two background tracks
+const INSTRUMENTAL = { instrumental: true };
 
 // Prompts are part of the asset source. `seed` picks the candidate used in the game.
 export const RECIPES = {
@@ -36,7 +39,13 @@ export const RECIPES = {
   'grumble-1': { model: VOICE, seed: 201, pitch: 1.18, max: 1.7, prompt: 'A tiny cartoon bee character with a squeaky, high-pitched, fast nasal voice grumbles angrily under its breath, saying only made-up comic gibberish: "Grrmbl-frazzle-snatz! Bzzt!" No real words, comedic mock cursing like in a children\'s cartoon, one short burst of about one and a half seconds, close dry studio recording, no music, no background sounds.' },
   'grumble-2': { model: VOICE, seed: 212, pitch: 1.18, max: 1.7, prompt: 'A tiny cartoon bee character with a squeaky, high-pitched, fast nasal voice splutters indignantly, saying only made-up comic gibberish: "Hnngh! Blibber-flumph, pfft!" No real words, comedic mock cursing like in a children\'s cartoon, one short burst of about one and a half seconds, close dry studio recording, no music, no background sounds.' },
   'grumble-3': { model: VOICE, seed: 203, pitch: 1.18, max: 1.7, prompt: 'A tiny cartoon bee character with a squeaky, high-pitched, fast nasal voice shouts in outrage, saying only made-up comic gibberish: "Oi! Zzzrk-a-dooflin! Bah!" No real words, comedic mock cursing like in a children\'s cartoon, one short burst of about one and a half seconds, close dry studio recording, no music, no background sounds.' },
-  alarm: { seed: 131, duration: 3, max: 1.8, prompt: 'Short comedic cartoon warning sound effect: a goofy descending slide whistle followed by one bouncy rubber bike horn honk, about one and a half seconds, then complete silence, isolated, no speech.' },
+  // A soft two-note "uh-oh" chime over the bumblebee drone swelling in; synthesized, no whistle.
+  alarm: { from: 'bumble', chime: { notes: [[0, 698.46], [0.2, 587.33], [0.66, 698.46], [0.86, 587.33]], length: 1.8 } },
+  slurp: { seed: 155, duration: 3, max: 1.3, prompt: 'Comedic cartoon slurping sound: a big fuzzy character greedily sucks thick honey through a tiny straw, one wet gurgling slurp with a happy little gulp at the end, about one second, then complete silence, isolated, no music, no speech.' },
+  // Background music: generated once, cut to a seamless loop, stereo, played quietly on the music channel.
+  'music-synthwave': { model: MUSIC, seed: 301, settings: INSTRUMENTAL, music: { from: 6, length: 70 }, prompt: 'Warm, mellow instrumental synthwave for a cozy video game set in a sunny flower garden full of bees: steady relaxed groove around 100 BPM, soft gated drums, round analog bass, shimmering arpeggiated synths, dreamy pads, retro 1980s feel, positive and laid back, consistent energy without breaks or big drops, no vocals.' },
+  // Modeled on classic beatless ambient chill-out albums: one drifting dreamscape of pads and field recordings.
+  'music-chill': { model: MUSIC, seed: 321, settings: INSTRUMENTAL, music: { from: 40, length: 80 }, prompt: 'Beatless ambient chill-out dreamscape, one continuous slowly drifting piece: warm analog synth pads and soft reverberant chords that swell and fade like breathing, deep calm bass drones; field recordings woven through the whole track: sheep bleating far away in a meadow, a distant train passing with a long soft horn, crickets and night insects, birdsong, a gentle stream, faint far-off thunder and soft wind; airy, spacious, nocturnal, dreamy and peaceful; no drums, no guitar, no vocals.' },
   dizzy: { seed: 145, duration: 2, max: 1.4, prompt: 'Cartoon dizzy sound effect: little twittering chirps and twinkling sparkles circling the head of a stunned character, whimsical and short, about one second, then complete silence, isolated, no music, no speech.' },
 };
 
@@ -49,13 +58,20 @@ async function generate(name, seed) {
   if (existsSync(target)) return target;
   const key = process.env.RUNWARE_API_KEY;
   if (!key) throw new Error('Set RUNWARE_API_KEY in the environment (never pass it as an argument or commit it).');
-  const recipe = RECIPES[name];
-  const response = await fetch('https://api.runware.ai/v1', {
-    method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify([{ taskType: 'audioInference', taskUUID: randomUUID(), model: recipe.model ?? MODEL, positivePrompt: recipe.prompt, ...(recipe.duration ? { duration: recipe.duration } : {}), ...(recipe.model ? {} : { seed }), outputFormat: 'WAV', numberResults: 1 }]),
-  });
-  const body = await response.json();
-  if (!response.ok || body.errors?.length) throw new Error(`${name}: ${JSON.stringify(body.errors ?? body).slice(0, 300)}`);
+  const recipe = RECIPES[name], taskUUID = randomUUID();
+  const call = async tasks => {
+    const response = await fetch('https://api.runware.ai/v1', { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(tasks) });
+    const body = await response.json();
+    if (!response.ok || body.errors?.length) throw new Error(`${name}: ${JSON.stringify(body.errors ?? body).slice(0, 300)}`);
+    return body;
+  };
+  // Music can take longer than the synchronous limit, so it is submitted async and polled.
+  const music = recipe.model === MUSIC;
+  let body = await call([{ taskType: 'audioInference', taskUUID, model: recipe.model ?? MODEL, positivePrompt: recipe.prompt, ...(recipe.duration ? { duration: recipe.duration } : {}), ...(recipe.model && recipe.model !== MUSIC ? {} : { seed }), ...(recipe.settings ? { settings: recipe.settings } : {}), ...(music ? { deliveryMethod: 'async' } : {}), outputFormat: 'WAV', numberResults: 1 }]);
+  for (let tries = 0; music && !body.data?.some(item => item.audioURL) && tries < 120; tries++) {
+    await new Promise(done => setTimeout(done, 5000));
+    body = await call([{ taskType: 'getResponse', taskUUID }]);
+  }
   // Seed Audio has no seed parameter, so its `seed` is only the local candidate label.
   for (const result of (body.data ?? []).slice(0, 1)) {
     const audio = await fetch(result.audioURL);
@@ -128,6 +144,22 @@ function tone(period, total, { f0, tilt, drift, flutter, tremolo }) {
   for (let i = 0; i < out.length; i++) { y += (one[i % size] - y) * 0.42; out[i] = y; }
   return out;
 }
+function chime(drone, { notes, length }) {
+  const size = Math.round(length * RATE), bell = new Float32Array(size);
+  for (const [at, f] of notes) for (let i = Math.round(at * RATE); i < size; i++) {
+    const t = i / RATE - at, env = Math.min(1, t / 0.005) * Math.exp(-t / 0.3);
+    if (t > 0.05 && env < 1e-4) break;
+    // Marimba-like: fundamental plus a quickly fading fourth partial; no pitch glide.
+    bell[i] += env * (Math.sin(2 * Math.PI * f * t) + 0.22 * Math.sin(2 * Math.PI * 4 * f * t) * Math.exp(-t / 0.05));
+  }
+  const level = rms(bell.filter(x => Math.abs(x) > 0.05)), hum = rms(drone) || 1, out = new Float32Array(size);
+  for (let i = 0; i < size; i++) {
+    const t = i / size, swell = Math.sin(Math.PI * Math.min(1, t * 1.15)) ** 1.5;
+    out[i] = bell[i] + drone[i % drone.length] / hum * level * 0.4 * swell;
+  }
+  const fade = Math.round(RATE * 0.15); for (let i = 0; i < fade; i++) out[size - 1 - i] *= i / fade;
+  return out;
+}
 function blend(main, texture, amount) {
   const out = new Float32Array(main.length), a = rms(main), b = rms(texture.subarray(0, main.length)) || 1;
   for (let i = 0; i < out.length; i++) out[i] = main[i] / a + (texture[i % texture.length] / b) * amount;
@@ -141,11 +173,26 @@ function loop(samples, { from, length }) {
   for (let i = 0; i < fade; i++) { const t = i / fade * Math.PI / 2; out[i] = out[i] * Math.sin(t) + samples[start + size + i] * Math.cos(t); }
   return level(out, -18);
 }
-function encode(name, samples) {
+function encode(name, samples, channels = 1) {
   const temp = resolve(cache, `${name}.f32`);
   writeFileSync(temp, Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength));
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'f32le', '-ar', String(RATE), '-ac', '1', '-i', temp, '-c:a', 'libmp3lame', '-b:a', '64k', '-map_metadata', '-1', resolve(output, `${name}.mp3`)]);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'f32le', '-ar', String(RATE), '-ac', String(channels), '-i', temp, '-c:a', 'libmp3lame', '-b:a', '64k', '-map_metadata', '-1', resolve(output, `${name}.mp3`)]);
   rmSync(temp);
+}
+// Music stays stereo: a long window with a 3 s equal-power crossfade so it loops without a seam.
+function musicLoop(file, { from, length }) {
+  const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
+  const all = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4), frames = all.length / 2;
+  const start = Math.round(from * RATE), size = Math.round(length * RATE), fade = Math.round(3 * RATE);
+  if (start + size + fade > frames) throw new Error(`${file}: track too short for the loop window`);
+  const out = all.slice(start * 2, (start + size) * 2);
+  for (let i = 0; i < fade; i++) {
+    const t = i / fade * Math.PI / 2;
+    for (let c = 0; c < 2; c++) out[i * 2 + c] = out[i * 2 + c] * Math.sin(t) + all[(start + size + i) * 2 + c] * Math.cos(t);
+  }
+  const scale = 10 ** (-20 / 20) / Math.max(1e-6, rms(out));
+  let peak = 0; for (const x of out) peak = Math.max(peak, Math.abs(x * scale));
+  return out.map(x => x * scale * (peak > 0.89 ? 0.89 / peak : 1));
 }
 
 mkdirSync(cache, { recursive: true }); mkdirSync(output, { recursive: true });
@@ -155,13 +202,14 @@ if (explore) {
   await Promise.all(seeds.map(seed => generate(explore, seed)));
   console.log(`${explore}: candidates in ${cache}`);
 } else {
-  const names = HIVE_SOUNDS.flatMap(soundFiles);
+  const only = option('--only')?.split(','), names = HIVE_SOUNDS.flatMap(soundFiles).filter(name => !only || only.includes(name));
   for (const name of names) if (!RECIPES[name]) throw new Error(`${name}: missing recipe`);
   if (!flag('--encode-only')) await Promise.all(names.filter(name => !RECIPES[name].from).map(name => generate(name, RECIPES[name].seed)));
   const finished = new Map();
   for (const name of names) {
     const recipe = RECIPES[name];
-    if (recipe.from) { encode(name, flyby(finished.get(recipe.from), recipe.flyby)); continue; }
+    if (recipe.from) { encode(name, recipe.chime ? level(chime(finished.get(recipe.from), recipe.chime), -17) : flyby(finished.get(recipe.from), recipe.flyby)); console.log(`${name}: derived from ${recipe.from}`); continue; }
+    if (recipe.music) { encode(name, musicLoop(resolve(cache, `${name}-${recipe.seed}.wav`), recipe.music), 2); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
     let samples = decode(resolve(cache, `${name}-${recipe.seed}.wav`), recipe.pitch);
     if (recipe.tone) {
       const { from, length } = recipe.loop, texture = samples.slice(Math.round(from * RATE));

@@ -9,8 +9,20 @@ export const LINES = Object.freeze({
   upset: ['Watch where you\'re bumbling!', 'Learn to fly, fuzzball!', 'Unbelievable!', 'That\'s it, I\'m telling the Queen!', 'You overgrown cotton ball!', '#@%&! Not again!', 'Hey! Pick on someone your own size!', 'Boo! Booo!'],
   bumble: ['Oopsie!', 'Pardon me!', 'Coming throoough!', 'Sorry, little guys!', 'Whoopsie-daisy!', 'Hic! Beg your pardon!', 'Wheee!', 'Who moved the garden?'],
   bumbleThud: ['Oof!', 'Who put a tree there?', 'Ow-ow-ow!', 'I\'m okay!'],
+  // Second visit: the bumblebee sits on the hive and drinks honey.
+  thiefArrives: ['Ooh, a whole hive of honey!', 'Snack time!', 'Don\'t mind me!'],
+  thief: ['Mmm, honey…', 'Nom nom nom!', 'Just one more sip!', 'Slurrrp!', 'Five more minutes!', 'Best. Hive. Ever.', 'You won\'t miss a little, right?'],
+  swarm: ['Get off our hive!', 'That\'s OUR honey!', 'Shoo! Shoo!', 'Everybody push!', 'Drop the honey, fuzzball!', 'Paws off the honey!', 'Hey! No snacking!', 'Somebody call the Queen!'],
+  thiefHit: ['Hey!', 'Oof! Rude!', 'Whoa, whoa!', 'Easy, tiny!', 'I was eating!'],
+  thiefFalls: ['Whoaaa!', 'Okay, okay, I\'m going!', 'Fine! Keep your honey!', 'Wheee… ow!'],
+  thiefLeaves: ['Thanks for the snack!', '*burp*', 'See you next round!'],
+  topple: ['Who knocked down the tree?!', 'Hey! I was using that!', 'Show-off!', 'Easy, Hercules!', 'My flower!!', 'Whoa, look at that one go!'],
+  shoved: ['Whoa! Strong little one!', 'Hey! Watch the fluff!', 'Okay, okay!', 'Ooof! Who ate their spinach?'],
+  givesUp: ['I\'m outta here!', 'Fine, fine, I\'m leaving!', 'Tough crowd!'],
+  cheer: ['Hooray!', 'Nice one!', 'Our hero!', 'Bye-bye, fuzzball!', 'Bee-autiful!', 'And stay out!'],
 });
-export const SOUNDS = Object.freeze({ bump: ['BOINK!', 'BOP!', 'BUMP!', 'BONK!'], thud: ['THUD!', 'CLONK!', 'DONK!', 'BONK!'], bumble: ['WHUMP!', 'KA-BOOF!', 'WHAM!', 'BOOF!'] });
+export const TOPPLE = Object.freeze({ tree: ['TIMBER!', 'CRASH!', 'KA-BOOM!'], flower: ['SMASH!', 'FLOMP!', 'WHAM!'], restore: ['BOING!', 'SPROING!', 'POP!'], power: ['KAPOW!', 'POW!', 'WHAM!'] });
+export const SOUNDS = Object.freeze({ bump: ['BOINK!', 'BOP!', 'BUMP!', 'BONK!'], thud: ['THUD!', 'CLONK!', 'DONK!', 'BONK!'], bumble: ['WHUMP!', 'KA-BOOF!', 'WHAM!', 'BOOF!'], poke: ['POKE!', 'BOP!', 'PUSH!'], fall: ['WHOOPS!', 'KA-BOOM!', 'TIMBER!'] });
 
 // Picks random entries without repeating the previous one of the same list.
 export function createPicker(random = Math.random) {

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { Game, RULES, BOOST } from './simulation.js';
+import { Game, RULES, BOOST, HEIST, POWER, SHOVE, LOAD, loadFactor } from './simulation.js';
+import { createPowerAura } from './features/power-aura.js';
+import { releaseBumblebee } from './features/bumblebee.js';
 import { WORLD, FLOWERS, TREES } from './world.js';
 import { markup } from './ui.js';
 import { GARDEN_PALETTE as palette } from './palette.js';
@@ -7,8 +9,11 @@ import { OrbitView, bindOrbitControls } from './features/orbit-view.js';
 import { BeeView, bindBeeLook, createBeeViewModel } from './features/bee-view.js';
 import { createFlower, createHoneyDrop, createBumblebee, createBurst, createDizzyStars, createHiveModel } from './features/models.js';
 import { createHiveAudio } from './features/audio/engine.js';
+import { MIXER, MUSIC_TRACKS } from './features/audio/manifest.js';
 import { createSoundscape } from './features/audio/soundscape.js';
 import { createBubbles } from './features/speech/bubbles.js';
+import { isFullscreenOf } from './features/fullscreen-state.js';
+import { createTour } from './features/tour.js';
 import { createReactions } from './features/speech/reactions.js';
 
 const ORBIT_FOV = 38;
@@ -33,15 +38,16 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   $('fullscreen').onclick = fullscreen;
   $('view').disabled = true;
   $('start').onclick = () => {
-    if (!renderer) return;
+    if (!renderer || started) return;
+    endTour();
     game.reset(); game.round = 1; player = game.addPlayer(); started = true;
     $('intro').hidden = true; $('flight-hud').hidden = false; $('pause').disabled = false; $('view').disabled = false; $('phase').textContent = 'ACTIVE';
     audio.setEnabled(soundOn); soundscape.reset();
-    toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.');
+    toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.'); $('intro-best').hidden = true;
   };
   function togglePause() {
     if (!started) return;
-    paused = !paused; keys.clear(); viewControls.cancel(); look.release();
+    paused = !paused; release(); viewControls.cancel(); look.release();
     paused ? audio.suspend() : audio.resume();
     $('pause').textContent = paused ? '▶' : 'Ⅱ'; $('pause').setAttribute('aria-label', paused ? 'Resume game' : 'Pause game'); $('phase').textContent = paused ? 'PAUSED' : 'ACTIVE';
     toast(paused ? 'Paused. Press P to resume.' : 'Resumed.');
@@ -50,29 +56,114 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   $('home').onclick = () => { toast('The glowing golden hive is in the center. Fly into its ring to deliver.'); hiveBeacon = 5; };
   function setView(next) {
     if (!player || next === view) return;
-    view = next; keys.clear(); viewControls.cancel();
+    view = next; release(); viewControls.cancel();
     const bee = view === 'bee';
     if (bee) beeView.face(player); else { look.release(); camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); }
     viewModel.group.visible = bee; $('reticle').hidden = !bee; root.classList.toggle('bee-view', bee);
     $('view').setAttribute('aria-pressed', bee); $('view').setAttribute('aria-label', bee ? 'Switch to garden view' : 'Switch to bee view');
-    $('view').innerHTML = bee ? '🌼 <span>Garden view</span>' : '👁 <span>Bee view</span>';
+    $('view').innerHTML = bee ? '🌼 <span>Garden view</span>' : '👁 <span>Bee view</span>'; renderControls();
     toast(bee ? 'Bee view: click the garden to steer with the mouse (or drag). W flies where you look.' : 'Garden view.');
   }
   $('view').onclick = () => setView(view === 'bee' ? 'orbit' : 'bee');
+  // Side panel listing the controls for the current view; keys light up while held.
+  const k = (code, label) => `<kbd data-k="${code}">${label}</kbd>`;
+  const row = (label, keys, extra = '') => `<div class="control-row${extra}"><span>${label}</span><span>${keys}</span></div>`;
+  function renderControls() {
+    const bee = view === 'bee';
+    $('controls-list').innerHTML = [
+      bee ? row('Fly', `${k('KeyW', 'W')}<small>where you look</small>${k('KeyS', 'S')}`) : row('Fly', `${k('KeyW', 'W')}${k('KeyA', 'A')}${k('KeyS', 'S')}${k('KeyD', 'D')}<small>or arrows</small>`),
+      row('▲ Up', k('Space', 'SPACE'), ' altitude-row'),
+      row('▼ Down', k('KeyC', 'C'), ' altitude-row'),
+      bee ? row('Strafe / turn', `${k('KeyA', 'A')}${k('KeyD', 'D')}${k('ArrowLeft', '←')}${k('ArrowRight', '→')}`) : '',
+      row('Boost', k('ShiftLeft', 'SHIFT')),
+      row('⚡ Power boost', `<small>when glowing</small>${k('ShiftLeft', 'SHIFT')}`),
+      row('🐝 Shove bumblebee', '<small>power boost · 2 🍯</small>'),
+      bee ? row('Look', '<small>click + mouse, or drag</small>') : row('Rotate / zoom', '<small>drag · scroll</small>'),
+      row(bee ? 'Garden view' : 'Bee view', k('KeyV', 'V')),
+      row('Fullscreen', k('KeyF', 'F')),
+      row('Pause', k('KeyP', 'P')),
+      row('This panel', k('KeyH', 'H')),
+    ].join('');
+    syncHeld();
+  }
+  function syncHeld() {
+    for (const key of root.querySelectorAll('kbd[data-k]')) key.classList.toggle('held', key.dataset.k.split(' ').some(code => keys.has(code) || (code === 'ShiftLeft' && keys.has('ShiftRight'))));
+  }
+  let panelOpen = !globalThis.matchMedia?.('(pointer: coarse)')?.matches, panelSpot = null, panelBeforeFullscreen = null, drag = null;
+  function setPanel(open) {
+    panelOpen = open; $('controls-panel').hidden = !open;
+    $('controls-toggle').setAttribute('aria-pressed', open); $('controls-toggle').setAttribute('aria-label', open ? 'Hide controls' : 'Show controls');
+    placePanel();
+  }
+  // The panel floats above the page, so it can be dragged beside the game; a strip always stays on screen.
+  function placePanel() {
+    const panel = $('controls-panel');
+    if (panel.hidden || !root.isConnected) return;
+    const area = root.getBoundingClientRect(), w = panel.offsetWidth || 212, h = panel.offsetHeight || 320;
+    const spot = panelSpot ?? { x: area.left + 16, y: area.top + Math.max(64, (area.height - h) / 2) };
+    const x = Math.max(56 - w, Math.min((globalThis.innerWidth || 1280) - 56, spot.x)), y = Math.max(0, Math.min((globalThis.innerHeight || 800) - 40, spot.y));
+    panel.style.left = `${x}px`; panel.style.top = `${y}px`;
+  }
+  $('controls-grip').addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    const box = $('controls-panel').getBoundingClientRect();
+    drag = { id: e.pointerId, dx: e.clientX - box.left, dy: e.clientY - box.top };
+    try { $('controls-grip').setPointerCapture(e.pointerId); } catch {}
+    $('controls-panel').classList.add('dragging'); e.preventDefault();
+  });
+  $('controls-grip').addEventListener('pointermove', e => {
+    if (drag?.id !== e.pointerId) return;
+    panelSpot = { x: e.clientX - drag.dx, y: e.clientY - drag.dy }; placePanel();
+  });
+  for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) $('controls-grip').addEventListener(name, () => { drag = null; $('controls-panel').classList.remove('dragging'); });
+  globalThis.addEventListener?.('resize', () => { if (active) placePanel(); });
+  // Fullscreen hides the panel (H brings it back) and shows a shortcut bar; leaving restores the panel.
+  function onFullscreen() {
+    const full = isFullscreenOf(root);
+    if (full === root.classList.contains('is-fullscreen')) return;
+    root.classList.toggle('is-fullscreen', full); panelSpot = null;
+    if (full) { panelBeforeFullscreen = panelOpen; setPanel(false); } else if (panelBeforeFullscreen !== null) { setPanel(panelBeforeFullscreen); panelBeforeFullscreen = null; }
+  }
+  for (const name of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(name, onFullscreen);
+  for (const button of root.querySelectorAll('[data-fs]')) button.onclick = () => $(button.dataset.fs).click();
+  $('controls-toggle').onclick = () => setPanel(!panelOpen);
+  $('controls-close').onclick = () => setPanel(false);
+  const release = () => { keys.clear(); syncHeld(); };
+  // Sound mixer: one slider per channel plus master, previewing the channel when released.
+  let music = MUSIC_TRACKS[0].id;
+  $('mixer-list').innerHTML = MIXER.map(channel => (channel.id === 'music' ? `<label class="mix-row track"><span>Background music</span><select id="music-track" aria-label="Background music">${MUSIC_TRACKS.map(track => `<option value="${track.id}">${track.label}</option>`).join('')}</select></label>` : '') + `<label class="mix-row${channel.id === 'master' ? ' master' : ''}"><span>${channel.label}</span><input type="range" min="0" max="150" step="5" value="100" data-bus="${channel.id}" aria-label="${channel.label}"><output>100%</output></label>`).join('');
+  $('music-track').onchange = e => { music = e.target.value; };
+  const showLevel = slider => { slider.nextElementSibling.textContent = `${slider.value}%`; };
+  for (const slider of root.querySelectorAll('[data-bus]')) {
+    showLevel(slider);
+    slider.addEventListener('input', () => { audio.setLevel(slider.dataset.bus, slider.value / 100); showLevel(slider); });
+    slider.addEventListener('change', () => {
+      const preview = MIXER.find(channel => channel.id === slider.dataset.bus)?.preview;
+      if (preview && started && !paused) audio.play(preview, null, { bus: slider.dataset.bus === 'master' ? undefined : slider.dataset.bus });
+    });
+  }
+  $('mixer-reset').onclick = () => {
+    audio.resetLevels();
+    for (const slider of root.querySelectorAll('[data-bus]')) { slider.value = 100; showLevel(slider); }
+    toast('Sound mixer reset to default.');
+  };
   document.addEventListener('keydown', e => {
     if (!active || modal.open || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target?.closest?.('input, select, textarea')) return; // Arrow keys adjust a focused slider, not the bee.
     if (e.code === 'KeyF' && !e.repeat) { e.preventDefault(); fullscreen(); return; }
+    if (e.code === 'KeyH' && !e.repeat) { setPanel(!panelOpen); return; }
+    if (e.code === 'Enter' && !started && !e.repeat && e.target === document.body) { $('start').click(); return; }
     if (!started) return;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyP' && !e.repeat) togglePause();
     if (e.code === 'KeyV' && !e.repeat && !paused) setView(view === 'bee' ? 'orbit' : 'bee');
-    keys.add(e.code);
+    keys.add(e.code); syncHeld();
   });
-  document.addEventListener('keyup', e => keys.delete(e.code));
-  window.addEventListener('blur', () => { keys.clear(); viewControls.cancel(); if (active && started && !paused) togglePause(); });
+  document.addEventListener('keyup', e => { keys.delete(e.code); syncHeld(); });
+  window.addEventListener('blur', () => { release(); viewControls.cancel(); if (active && started && !paused) togglePause(); });
   for (const button of root.querySelectorAll('[data-key]')) {
-    button.addEventListener('pointerdown', e => { e.preventDefault(); button.setPointerCapture(e.pointerId); keys.add(button.dataset.key); });
-    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => keys.delete(button.dataset.key));
+    button.addEventListener('pointerdown', e => { e.preventDefault(); button.setPointerCapture(e.pointerId); keys.add(button.dataset.key); syncHeld(); });
+    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => { keys.delete(button.dataset.key); syncHeld(); });
   }
 
   // All artwork is procedural. No remote models, textures, fonts, or services.
@@ -123,14 +214,16 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   scene.add(grass);
   const hive = createHiveModel(); scene.add(hive.group);
   let hiveBeacon = 0;
+  const pivots = new Map();
   const flowerModels = FLOWERS.map(f => {
     const flower = createFlower({ color: palette.flowers[f.color % palette.flowers.length], height: f.height, seed: f.id + 1 });
-    flower.group.position.set(f.x, 0, f.z); scene.add(flower.group);
+    // A pivot at the stem's base lets a power boost knock the whole plant over.
+    const pivot = new THREE.Group(); pivot.position.set(f.x, 0, f.z); pivot.add(flower.group); scene.add(pivot); pivots.set(`flower:${f.id}`, pivot);
     const drop = createHoneyDrop(); drop.group.position.set(f.x, f.y, f.z); scene.add(drop.group);
     return { flower, drop };
   });
   for (const [i, t] of TREES.entries()) {
-    const tree = new THREE.Group(); tree.position.set(t.x, 0, t.z); scene.add(tree);
+    const tree = new THREE.Group(); tree.position.set(t.x, 0, t.z); scene.add(tree); pivots.set(`tree:${t.id}`, tree);
     mesh(cylinder(0.2, 0.32, t.height + 0.4, 7), '#806145', tree, 0, (t.height + 0.4) / 2, 0);
     orb(tree, palette.foliage[i % palette.foliage.length], 0, t.height + 0.9, 0, t.canopy, t.canopy * 1.12, t.canopy);
     orb(tree, palette.foliage[(i + 1) % palette.foliage.length], t.canopy * 0.4, t.height + 1.6, t.canopy * 0.15, t.canopy * 0.7);
@@ -151,6 +244,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     for (const z of [-0.2, 0.12]) { const band = mesh(cylinder(0.305, 0.305, 0.13, 16), '#34352d', body, 0, 0, z); band.rotation.x = Math.PI / 2; }
     orb(body, '#34352d', 0, 0.04, 0.44, 0.29, 0.27, 0.23);
     for (const x of [-0.13, 0.13]) { orb(body, '#fff7d7', x, 0.13, 0.61, 0.07); orb(body, '#282f29', x, 0.13, 0.66, 0.035); const antenna = mesh(cylinder(0.015, 0.02, 0.24, 5), '#34352d', body, x, 0.36, 0.47); antenna.rotation.z = x * -3; }
+    // Six thin legs; the hind legs carry pollen baskets that grow with the nectar load.
+    for (const z of [0.2, 0.02, -0.16]) for (const side of [-1, 1]) { const leg = mesh(cylinder(0.02, 0.012, 0.3, 5), '#2f2d27', body, side * 0.17, -0.28, z); leg.rotation.set(z * 0.9, 0, side * 0.45); }
+    const baskets = [-1, 1].map(side => { const basket = orb(body, '#f0a31c', side * 0.25, -0.41, -0.2, 1, 1.15, 1.3, { roughness: 0.32, emissive: '#7a4a00', emissiveIntensity: 0.3 }); basket.scale.setScalar(0.001); basket.visible = false; return basket; });
     const wings = [];
     for (const side of [-1, 1]) { const wing = orb(body, p.bot ? palette.wings[p.id % palette.wings.length] : '#fff8e4', side * 0.36, 0.22, -0.06, 0.4, 0.035, 0.22, { transparent: true, opacity: 0.65, roughness: 0.3 }); wings.push(wing); }
     const shadow = mesh(new THREE.CircleGeometry(p.bot ? 0.35 : 0.5, 24), p.bot ? palette.bees[p.id % palette.bees.length] : '#f9d260', scene, 0, 0.08, 0, { transparent: true, opacity: 0.4 }); shadow.rotation.x = -Math.PI / 2; shadow.castShadow = false;
@@ -163,13 +259,14 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     ctx.fillText(p.bot ? p.name : 'YOU', 128, 39);
     const labelTexture = new THREE.CanvasTexture(labelCanvas); const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture, depthTest: false })); label.position.y = 1.1; label.scale.set(2.5, 0.625, 1); group.add(label);
     const stars = createDizzyStars(); stars.group.position.y = 0.55; stars.group.visible = false; group.add(stars.group);
+    const aura = p.bot ? null : createPowerAura(); if (aura) { body.add(aura.outline); group.add(aura.halo); }
     group.position.set(p.x, p.y, p.z);
-    beeModels.set(p.id, { group, body, wings, shadow, stem, stars, labelTexture, tumble: 0 });
+    beeModels.set(p.id, { group, body, wings, shadow, stem, stars, aura, baskets, load: 0, labelTexture, label, tumble: 0 });
   }
   const bumble = createBumblebee(); bumble.group.visible = false; scene.add(bumble.group);
   const bumbleShadow = mesh(new THREE.CircleGeometry(1.1, 28), '#2a2a20', scene, 0, 0.08, 0, { transparent: true, opacity: 0.3 }); bumbleShadow.rotation.x = -Math.PI / 2; bumbleShadow.castShadow = false; bumbleShadow.visible = false;
 
-  const head = new THREE.Vector3(), probe = new THREE.Vector3(), hiveTop = new THREE.Vector3(0, 5.4, 0);
+  const head = new THREE.Vector3(), probe = new THREE.Vector3(), hiveTop = new THREE.Vector3(0, 5.4, 0), axis = new THREE.Vector3();
   function locate(id) {
     if (id === 'bumble') return bumble.group.visible ? head.copy(bumble.group.position).add(probe.set(0, 1.9, 0)) : null;
     if (view === 'bee' && player && id === player.id) return null;
@@ -195,7 +292,34 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     $('bumble-marker').style.setProperty('--angle', `${(Math.atan2(dx, -dy) * 180 / Math.PI).toFixed(1)}deg`);
   }
 
-  let lastBag = 0, lastScore = 0, lastResult = null, lastRound = 1, uiTime = 0, alertTime = 0;
+  let lastBag = 0, lastScore = 0, lastResult = null, lastRound = 1, uiTime = 0, alertTime = 0, heistNote = null, powerTip = 0, powerNag = 0, loadTip = 0;
+  // Short reminder overlay while the nectar power waits to be used.
+  function updatePowerTip(dt) {
+    const charged = started && player?.powered && !game.boosting(player);
+    if (charged) { powerNag -= dt; if (powerNag <= 0) { powerTip = 2.5; powerNag = 14; } } else { powerTip = 0; powerNag = 14; }
+    powerTip = Math.max(0, powerTip - dt); loadTip = Math.max(0, loadTip - dt);
+    // Only one hint at a time: the power reminder wins.
+    $('power-tip').hidden = !powerTip; $('load-tip').hidden = !loadTip || !!powerTip; root.classList.toggle('powered', !!(started && player?.powered));
+  }
+  // Information sign while the bumblebee raids the hive, then the outcome for a few seconds.
+  function updateHeist(dt) {
+    const b = game.bumble, raid = started && b?.mode === 'heist' && (b.phase === 'approach' || b.phase === 'perched');
+    if (heistNote) heistNote.time -= dt;
+    if (heistNote && heistNote.time <= 0) heistNote = null;
+    const banner = $('heist-banner'), show = raid || (started && heistNote);
+    banner.hidden = !show; $('mission-status').classList.toggle('draining', !!raid && b.phase === 'perched');
+    if (!show) return;
+    banner.classList.toggle('saved', !raid && heistNote.saved);
+    if (raid) {
+      $('heist-title').textContent = '🍯 HONEY THIEF!';
+      $('heist-text').textContent = b.phase === 'perched' ? `It's drinking your honey! Fly to the hive and bump into it ${HEIST.hits}×.` : 'The bumblebee is heading for the hive. Get ready to bump it off!';
+      $('heist-hits').innerHTML = Array.from({ length: HEIST.hits }, (_, i) => `<i class="${i < b.knocks ? 'hit' : ''}"></i>`).join('');
+    } else {
+      $('heist-title').textContent = heistNote.saved ? '🎉 HONEY SAVED!' : '🍯 HONEY STOLEN';
+      $('heist-text').textContent = heistNote.saved ? `You knocked the bumblebee off the hive. It got away with ${heistNote.drained} nectar.` : `The bumblebee flew off with ${heistNote.drained} nectar.`;
+      $('heist-hits').innerHTML = '';
+    }
+  }
   function updateUI() {
     const seconds = Math.max(0, Math.ceil(game.remaining)); $('timer').textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
     $('round').textContent = String(game.round).padStart(2, '0'); $('honey').textContent = game.honey;
@@ -205,22 +329,33 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       const recharge = BOOST.cooldown - BOOST.duration;
       if (game.boosting(player)) { $('boost-label').textContent = `BOOST ${(player.boost - recharge).toFixed(1)}s`; $('boost-meter').style.width = `${(player.boost - recharge) / BOOST.duration * 100}%`; }
       else { $('boost-label').textContent = player.boost ? `BOOST IN ${Math.ceil(player.boost)}s` : 'BOOST READY'; $('boost-meter').style.width = `${(1 - player.boost / recharge) * 100}%`; }
+      $('power-pips').innerHTML = Array.from({ length: POWER.need }, (_, i) => `<i class="${player.powered || i < player.power ? 'on' : ''}"></i>`).join('');
+      $('power').classList.toggle('ready', player.powered); $('power-label').textContent = player.powered ? '⚡ POWER READY' : 'NECTAR POWER';
+      // Bumblebee shoves left: each costs 2 nectar from the bag, so the count drops with every shove.
+      const shoves = Math.floor(player.bag / SHOVE.cost); $('shoves').hidden = !player.powered; $('shoves').textContent = `🐝 SHOVES ×${shoves}`; $('shoves').classList.toggle('empty', !shoves);
       $('alt').textContent = player.y.toFixed(1); $('alt-marker').style.bottom = `${(player.y - WORLD.floor) / (WORLD.ceiling - WORLD.floor) * 26}px`;
-      if (player.score > lastScore) toast(`+${player.score - lastScore} nectar delivered.`);
-      else if (player.bag > lastBag && player.bag === RULES.capacity) toast('Nectar bag full! Head back to the golden hive.');
+      if (player.bag > lastBag && player.bag === RULES.capacity) toast('Nectar bag full! Bring it to the hive for double points.');
+      $('points').textContent = player.points.toLocaleString('en'); $('best').textContent = `BEST ${Math.max(game.best, player.points).toLocaleString('en')}`;
+      const heavy = player.bag >= LOAD.heavy; $('bag-label').textContent = heavy ? `YOUR NECTAR · HEAVY −${Math.round((1 - loadFactor(player.bag)) * 100)}%` : 'YOUR NECTAR'; $('bag-label').classList.toggle('heavy', heavy);
       lastBag = player.bag; lastScore = player.score;
     }
     if (started && game.result && game.result !== lastResult) {
       $('phase').textContent = 'RESETTING';
-      showModal(`<p class="eyebrow">ROUND ${game.round}</p><h2>${game.result === 'complete' ? 'Goal reached.' : 'Time expired.'}</h2><p>Hive: <strong>${game.honey} / 300 nectar</strong><br>Your contribution: <strong>${player.score}</strong></p><p class="result-note">Next round in 12 seconds.</p>`); audio.chime(1046);
+      const best = game.scores.map((s, i) => `${i + 1}. Round ${s.round}: ${s.points.toLocaleString('en')} points`).join('<br>');
+      showModal(`<p class="eyebrow">ROUND ${game.round}</p><h2>${game.result === 'complete' ? 'Goal reached.' : 'Time expired.'}</h2><p>Hive: <strong>${game.honey} / 300 nectar</strong><br>Your contribution: <strong>${player.score} nectar</strong><br>Your score: <strong>${player.points.toLocaleString('en')} points</strong>${game.newBest ? ' <strong>🏆 NEW HIGHSCORE!</strong>' : ''}</p><p class="result-note">Best rounds this session:<br>${best}</p><p class="result-note">Next round in 12 seconds.</p>`); audio.chime(game.newBest ? 1318 : 1046);
     }
-    if (game.round !== lastRound) { modal.close(); $('phase').textContent = 'ACTIVE'; toast('New round.'); lastScore = 0; lastBag = 0; }
+    if (game.round !== lastRound) { modal.close(); $('phase').textContent = 'ACTIVE'; toast(game.best ? `New round. Best this session: ${game.best.toLocaleString('en')} points.` : 'New round.'); lastScore = 0; lastBag = 0; }
     lastResult = game.result; lastRound = game.round;
     $('alert-count').textContent = Math.ceil(game.bumbleWarn);
   }
   function handle(events, dt) {
     for (const event of events) {
       if (event.type === 'collect') burst.emit(probe.set(FLOWERS[event.flower].x, FLOWERS[event.flower].y, FLOWERS[event.flower].z), { color: '#ffd35a', count: 16, speed: 2.2 });
+      else if (event.type === 'deliver' && player && event.id === player.id) {
+        bubbles.pow({ x: 0, y: 5.6, z: 0 }, `+${event.points}${event.bonus > 1 ? ` ×${event.bonus}` : ''}`, 'points');
+        toast(`+${event.points} points: ${event.amount} nectar${event.bonus > 1 ? ` × ${event.bonus} ${event.amount >= RULES.capacity ? 'full' : 'big'}-load bonus` : ''}.`);
+        burst.emit(probe.set(0, 4.3, 0), { color: '#f5b324', count: 34, speed: 3.6, gravity: -5 }); hiveBeacon = Math.max(hiveBeacon, 0.6);
+      }
       else if (event.type === 'deliver') { burst.emit(probe.set(0, 4.3, 0), { color: '#f5b324', count: 34, speed: 3.6, gravity: -5 }); hiveBeacon = Math.max(hiveBeacon, 0.6); }
       else if (event.type === 'bump') burst.emit(probe.set(event.x, event.y, event.z), { color: '#fff7d9', count: 10, speed: 2.4, gravity: 0, life: 0.5 });
       else if (event.type === 'thud') burst.emit(probe.set(event.x, event.y, event.z), { color: '#d9c49a', count: 8, speed: 1.8, gravity: -2, life: 0.6 });
@@ -229,8 +364,15 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
         if (event.spilled) burst.emit(probe, { color: '#f6b21b', count: event.spilled * 7, speed: 1.6, gravity: -9, size: 0.16, life: 1.1 });
         if (player && event.id === player.id) { beeView.bump(1); toast(event.spilled ? `Bumped by the bumblebee! You spilled ${event.spilled} nectar.` : 'Bumped by the bumblebee!'); }
       }
-      if (started && event.type === 'bumble-warning') { $('bumble-alert').hidden = false; alertTime = event.seconds + 0.6; }
-      if (started && event.type === 'bumble-enter') toast('Here it comes! Dodge the bumblebee!');
+      if (started && event.type === 'bumble-warning') { $('alert-text').textContent = event.mode === 'heist' ? 'BUMBLEBEE WANTS YOUR HONEY' : 'BUMBLEBEE INCOMING'; $('bumble-alert').hidden = false; alertTime = event.seconds + 0.6; }
+      if (started && event.type === 'bumble-enter' && event.mode !== 'heist') toast('Here it comes! Dodge the bumblebee!');
+      if (started && event.type === 'heist-end') heistNote = { saved: event.rescued, drained: event.drained, time: 4 };
+      if (started && event.type === 'power-ready') { powerTip = 3.5; powerNag = 14; }
+      if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = 4;
+      if (event.type === 'topple') burst.emit(probe.set(event.x, event.y, event.z), { color: event.kind === 'tree' ? '#7fae5c' : '#f2a5c0', count: 22, speed: 3.4, gravity: -4, size: 0.14 });
+      if (event.type === 'restore') burst.emit(probe.set(event.x, 0.6, event.z), { color: '#fff3b0', count: 10, speed: 1.6, gravity: 0, life: 0.5 });
+      if (event.type === 'bumble-shoved') { burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffd23f', count: 30, speed: 5.5, gravity: -1, life: 0.8 }); if (player && event.id === player.id) beeView.bump(0.6); }
+      if (event.type === 'bump' && event.power) burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffd23f', count: 26, speed: 5, gravity: -1, life: 0.7 });
       if (player && (event.type === 'bump' && (event.by === player.id || event.victim === player.id) || event.type === 'thud' && event.id === player.id)) beeView.bump(0.35);
     }
     for (const action of react(events, game, dt)) {
@@ -245,7 +387,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   function input(dt) {
     const held = (...codes) => codes.some(code => keys.has(code));
     const forward = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
-    const vertical = Number(held('Space', 'KeyE')) - Number(held('KeyC', 'KeyQ'));
+    const vertical = Number(held('Space')) - Number(held('KeyC'));
     const dash = held('ShiftLeft', 'ShiftRight');
     if (view === 'bee') {
       const turn = Number(held('ArrowRight')) - Number(held('ArrowLeft'));
@@ -276,27 +418,48 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bee.tumble = p.stun ? bee.tumble + dt * 13 : bee.tumble * Math.exp(-dt * 8);
       bee.body.rotation.z = p.stun ? Math.sin(bee.tumble) * 0.9 : p.angry ? Math.sin(elapsed * 38) * 0.18 : Math.sin(elapsed * 2 + p.id) * 0.04;
       bee.body.rotation.x = p.stun ? Math.cos(bee.tumble * 0.7) * 0.5 : Math.max(-0.35, Math.min(0.35, -p.vy * 0.06));
+      // Pollen baskets swell with every drop and shrink away after delivering.
+      bee.load += (p.bag / RULES.capacity - bee.load) * Math.min(1, dt * 8);
+      const basket = bee.load > 0.01 ? 0.05 + 0.09 * bee.load : 0;
+      bee.baskets.forEach(b => { b.visible = basket > 0; b.scale.set(basket, basket * 1.15, basket * 1.3); });
       bee.wings.forEach((w, i) => { w.rotation.z = Math.sin(elapsed * (game.boosting(p) ? 95 : 75)) * 0.45 * (i ? 1 : -1); });
       bee.shadow.position.set(p.x, 0.07, p.z); bee.shadow.material.opacity = 0.45 - Math.min(0.3, (p.y - WORLD.floor) * 0.035);
       bee.stars.group.visible = p.stun > 0.2; if (p.stun) bee.stars.update(elapsed);
-      bee.group.visible = !(own && view === 'bee');
+      bee.aura?.update(dt, elapsed, { active: p.powered, boosting: game.powerBoosting(p) });
+      bee.group.visible = !(own && view === 'bee'); // Name tags of bees right in front of the camera would cover the view (tour close-ups, bee view).
+      const near = camera.position.distanceTo(bee.group.position); bee.label.visible = !started ? near > 11 : view !== 'bee' || near > 6;
       if (bee.stem) { bee.stem.visible = view === 'orbit' && started; bee.stem.position.copy(bee.group.position); bee.stem.scale.y = Math.max(0.01, bee.group.position.y - 0.1); }
     }
     const b = game.bumble;
     bumble.group.visible = bumbleShadow.visible = !!b;
     if (b) {
       if (!bumble.seen) { bumble.group.position.set(b.x, b.y, b.z); bumble.group.rotation.y = b.yaw; bumble.seen = true; }
-      bumble.group.position.lerp(probe.set(b.x, b.y, b.z), 1 - Math.exp(-dt * 10));
+      // A bumped thief shakes on the hive; a dislodged one tumbles while it falls.
+      const shake = b.wobble ? Math.sin(elapsed * 42) * 0.12 * b.wobble : 0;
+      bumble.group.position.lerp(probe.set(b.x + shake, b.y, b.z - shake), 1 - Math.exp(-dt * 10));
       bumble.group.rotation.y += Math.atan2(Math.sin(b.yaw - bumble.group.rotation.y), Math.cos(b.yaw - bumble.group.rotation.y)) * Math.min(1, dt * 6);
-      bumble.update(dt, elapsed, { speed: b.speed, stunned: b.oops > 0 });
+      if (b.phase === 'falling') { bumble.group.rotation.z += dt * 9; bumble.group.rotation.x += dt * 4; }
+      else { bumble.group.rotation.z *= Math.exp(-dt * 6); bumble.group.rotation.x *= Math.exp(-dt * 6); }
+      const perched = b.phase === 'perched';
+      bumble.update(dt, elapsed, { speed: b.speed, stunned: b.oops > 0 || b.wobble > 0.3, perched, sucking: perched, flailing: b.phase === 'falling' });
       bumbleShadow.position.set(b.x, 0.07, b.z);
     } else bumble.seen = false;
+    if (!started) tourFrame(dt, elapsed);
     flowerModels.forEach(({ flower, drop }, i) => { flower.update(elapsed); drop.update(dt, elapsed, !game.cooldowns[i]); });
+    // Toppled trees and flowers fall over, lie a moment with a small bounce, and stand up again.
+    for (const [owner, pivot] of pivots) {
+      const state = game.toppled.get(owner);
+      if (!state) { if (pivot.userData.down) { pivot.quaternion.identity(); pivot.userData.down = false; } continue; }
+      const total = POWER.topple + POWER.rise, since = total - state.time;
+      const angle = since < 0.35 ? 1.45 * (since / 0.35) ** 2 : state.time > POWER.rise ? 1.45 - Math.abs(Math.sin((since - 0.35) * 9)) * 0.12 * Math.exp(-(since - 0.35) * 4) : 1.45 * (1 - (1 - state.time / POWER.rise) ** 2);
+      pivot.quaternion.setFromAxisAngle(axis.set(state.dz, 0, -state.dx).normalize(), angle); pivot.userData.down = true;
+    }
     burst.update(dt);
     hiveBeacon = Math.max(0, hiveBeacon - dt); hive.update(elapsed, hiveBeacon);
     motes.rotation.y = Math.sin(elapsed * 0.07) * 0.1;
     const own = player && beeModels.get(player.id);
-    if (view === 'bee' && own) {
+    if (!started && !reducedMotion) { /* The landing tour placed the camera. */ }
+    else if (view === 'bee' && own) {
       beeView.apply(camera, own.group.position, dt, elapsed, { strafe, boosting: game.boosting(player), stunned: player.stun > 0 });
       viewModel.update(elapsed, { boosting: game.boosting(player) });
     } else {
@@ -306,7 +469,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     }
     if (player && started) {
       const listener = view === 'bee' ? { x: player.x, y: player.y, z: player.z, yaw: beeView.yaw, pitch: beeView.pitch } : { x: player.x, y: player.y, z: player.z, yaw: orbit.azimuth + Math.PI };
-      if (!paused) soundscape.frame(game, player, dt, { listener, beeView: view === 'bee' });
+      if (!paused) soundscape.frame(game, player, dt, { listener, beeView: view === 'bee', music });
     }
     renderer.render(scene, camera);
     bubbles.update(dt, camera, width, height, locate);
@@ -315,16 +478,77 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (label.visible) $('hive-label').style.transform = `translate3d(${label.x.toFixed(1)}px, ${(label.y - 6).toFixed(1)}px, 0) translate(-50%, -100%)`;
     alertTime = Math.max(0, alertTime - (paused ? 0 : dt));
     if (!alertTime) $('bumble-alert').hidden = true;
-    if (started && (game.bumbleWarn || b) && !(b && b.leaving)) placeMarker(b ? bumble.group.position : markerTarget.set(Math.sin(game.bumbleAngle) * WORLD.radius, 4, Math.cos(game.bumbleAngle) * WORLD.radius));
+    updateHeist(paused ? 0 : dt); updatePowerTip(paused ? 0 : dt);
+    const entry = game.bumbleMode === 'heist' ? game.heistAngle : game.bumbleAngle, gone = b && (b.leaving || b.phase === 'leaving' || b.phase === 'falling');
+    if (started && (game.bumbleWarn || b) && !gone) placeMarker(b ? bumble.group.position : markerTarget.set(Math.sin(entry) * WORLD.radius, 4, Math.cos(entry) * WORLD.radius));
     else $('bumble-marker').hidden = true;
     uiTime += dt; if (uiTime > 0.12) { updateUI(); uiTime = 0; }
   }
 
+  // Landing tour: camera shots of the live garden, captions on how to play, then "Let's go!".
+  const tour = createTour(), reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  const tourPos = new THREE.Vector3(), tourAim = new THREE.Vector3(), tourLook = new THREE.Vector3();
+  let tourStep = -1, tourYaw = null, tourScout = 1;
+  const wrap = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
+  function showCaption(step) {
+    const caption = $('tour-caption'), steps = tour.count - 1;
+    $('tour-step').textContent = step.finale ? 'READY?' : `HOW TO PLAY · ${tour.index + 1} / ${steps}`;
+    $('tour-title').textContent = step.title; $('tour-text').textContent = step.text;
+    $('tour-dots').innerHTML = Array.from({ length: steps }, (_, i) => `<i class="${i <= tour.index ? 'on' : ''}"></i>`).join('');
+    caption.classList.toggle('finale', !!step.finale);
+    caption.classList.remove('show'); void caption.offsetWidth; caption.classList.add('show');
+    $('start').classList.toggle('pulse', !!step.finale);
+  }
+  function tourFrame(dt, elapsed) {
+    const { cover } = tour.update(paused || !active ? 0 : dt), step = tour.step, t = tour.time;
+    if (tour.index !== tourStep) {
+      tourStep = tour.index; tourYaw = null; showCaption(step);
+      const scouts = [...game.players.values()].filter(p => p.bot); tourScout = scouts[tour.index % scouts.length]?.id ?? 1;
+      if (step.shot === 'bumble') bubbles.say('bumble', 'Coming throoough!', { style: 'bumble', delay: 0.5 });
+    }
+    $('tour-cover').style.opacity = reducedMotion ? '0' : (cover * 0.92).toFixed(3);
+    root.classList.toggle('bee-view', step.shot === 'bee' && !reducedMotion);
+    if (reducedMotion) return;
+    const scout = game.players.get(tourScout) ?? game.players.values().next().value;
+    let fov = ORBIT_FOV, snap = cover > 0.8 || tourPos.lengthSq() === 0;
+    if (step.shot === 'orbit' || step.shot === 'finale') {
+      const a = 0.6 + elapsed * 0.08, r = step.finale ? 46 : 36;
+      tourPos.set(Math.sin(a) * r, step.finale ? 27 : 19, Math.cos(a) * r); tourLook.set(0, 1.5, 0);
+    } else if (step.shot === 'hive') {
+      const a = t * 0.3 + 0.4; tourPos.set(Math.sin(a) * 16, 8, Math.cos(a) * 16); tourLook.set(0, 2.4, 0);
+    } else if (step.shot === 'chase' || step.shot === 'bee') {
+      // Follow one scout from behind, then look through its eyes.
+      tourYaw = tourYaw === null ? scout.yaw : tourYaw + wrap(scout.yaw - tourYaw) * Math.min(1, dt * 3);
+      const fx = Math.sin(tourYaw), fz = Math.cos(tourYaw);
+      if (step.shot === 'chase') { tourPos.set(scout.x - fx * 3.8, scout.y + 1.7, scout.z - fz * 3.8); tourLook.set(scout.x + fx * 2, scout.y + 0.2, scout.z + fz * 2); const model = beeModels.get(scout.id); if (model) model.label.visible = false; }
+      else {
+        fov = 72; snap = true;
+        tourPos.set(scout.x + fx * 0.32, scout.y + 0.2, scout.z + fz * 0.32);
+        tourLook.set(tourPos.x + fx * 4, tourPos.y - 0.35 + Math.max(-1.2, Math.min(1.2, scout.vy * 0.3)), tourPos.z + fz * 4);
+        const model = beeModels.get(scout.id); if (model) model.group.visible = false;
+      }
+    } else if (step.shot === 'bumble') {
+      // A real bumblebee charges into a group of scouts, so the tour shows bumps, stars, and shouting.
+      if (!game.bumble) releaseBumblebee(game);
+      const p = bumble.group.visible ? bumble.group.position : (game.bumble ? probe.set(game.bumble.x, game.bumble.y, game.bumble.z) : tourLook), yaw = game.bumble?.yaw ?? 0;
+      tourPos.set(p.x + Math.sin(yaw + 0.6) * 9, p.y + 1.8, p.z + Math.cos(yaw + 0.6) * 9); tourLook.copy(p);
+    }
+    if (snap) { camera.position.copy(tourPos); tourAim.copy(tourLook); }
+    else { camera.position.lerp(tourPos, 1 - Math.exp(-dt * 4)); tourAim.lerp(tourLook, 1 - Math.exp(-dt * 6)); }
+    camera.lookAt(tourAim);
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = snap ? fov : camera.fov + (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
+  }
+  function endTour() {
+    $('tour-caption').hidden = true; $('tour-cover').style.opacity = '0'; $('start').classList.remove('pulse');
+    root.classList.remove('bee-view'); camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); orbitTarget.set(0, 0, 0);
+  }
+
+  renderControls(); setPanel(panelOpen);
   return {
     update,
     pause() { if (started && !paused) togglePause(); },
-    resize(w, h) { width = w; height = h; camera.aspect = w / h; camera.updateProjectionMatrix(); },
-    activate() { active = true; container.replaceChildren(root); renderer.domElement.setAttribute('aria-label', 'A floating garden with bees and a golden hive'); if (started && !paused) audio.resume(); updateUI(); },
-    deactivate() { active = false; keys.clear(); viewControls.cancel(); look.release(); audio.suspend(); root.remove(); },
+    resize(w, h) { width = w; height = h; camera.aspect = w / h; camera.updateProjectionMatrix(); placePanel(); },
+    activate() { active = true; container.replaceChildren(root); onFullscreen(); placePanel(); renderer.domElement.setAttribute('aria-label', 'A floating garden with bees and a golden hive'); if (started && !paused) audio.resume(); updateUI(); },
+    deactivate() { active = false; release(); viewControls.cancel(); look.release(); audio.suspend(); root.remove(); },
   };
 }

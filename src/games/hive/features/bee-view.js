@@ -53,7 +53,8 @@ export function bindBeeLook(canvas, view, enabled) {
     if (event.pointerType === 'mouse' && canvas.requestPointerLock && !locked()) {
       try { Promise.resolve(canvas.requestPointerLock()).catch(() => {}); } catch {}
     }
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY }; canvas.setPointerCapture?.(event.pointerId);
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    try { canvas.setPointerCapture?.(event.pointerId); } catch {} // Not allowed while the pointer is being locked.
   });
   canvas.addEventListener('pointermove', event => {
     if (!enabled()) return;

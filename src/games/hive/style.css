@@ -88,7 +88,7 @@
 @keyframes garden-pow { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(var(--tilt, 0deg)); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(var(--tilt, 0deg)); } 30% { transform: translate(-50%, -50%) scale(1) rotate(var(--tilt, 0deg)); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.95) rotate(var(--tilt, 0deg)); } }
 
 /* Bumblebee warning: red pulse at the screen edges and a direction marker. */
-.garden-ui .bumble-alert { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 86px; pointer-events: none; box-shadow: inset 0 0 140px 30px #e0241bb0; background: #c01a1222; animation: garden-alert-pulse .6s ease-in-out infinite alternate; }
+.garden-ui .bumble-alert { position: absolute; z-index: 1100; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 86px; pointer-events: none; box-shadow: inset 0 0 140px 30px #e0241bb0; background: #c01a1222; animation: garden-alert-pulse .6s ease-in-out infinite alternate; }
 .garden-ui .alert-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 2px solid #ffd9d2; border-radius: 3px; background: #b3170fe6; color: #fff; font-size: 12px; letter-spacing: 1.5px; box-shadow: 0 6px 24px #0006; }
 .garden-ui .alert-banner strong { font-weight: 800; }
 .garden-ui .alert-banner em { min-width: 22px; padding: 2px 6px; border-radius: 2px; background: #fff; color: #b3170f; font-style: normal; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
@@ -109,5 +109,139 @@
 }
 @media (pointer: coarse) {
 .garden-ui .mobile-controls button[data-key="Space"], .garden-ui .mobile-controls button[data-key="KeyC"] { font-size: 13px; }
+
+}
+
+/* Side panel with the controls; altitude keys are highlighted and light up while held. */
+.garden-ui .controls-panel { position: fixed; left: 0; top: 0; z-index: 1200; width: 228px; max-height: calc(100dvh - 16px); overflow: auto; overscroll-behavior: contain; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel-glass); backdrop-filter: blur(12px); font-size: 10px; color: var(--text); pointer-events: auto; }
+.garden-ui .controls-panel header { cursor: grab; touch-action: none; user-select: none; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: 8px; letter-spacing: 1px; }
+.garden-ui .controls-panel header button { width: 22px; height: 22px; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; }
+.garden-ui .controls-panel header button:hover { color: var(--green); }
+.garden-ui .control-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+.garden-ui .control-row > span:first-child { color: var(--muted); white-space: nowrap; }
+.garden-ui .control-row > span:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; text-align: right; }
+.garden-ui .control-row small { color: var(--muted); font-size: 9px; }
+.garden-ui .control-row.altitude-row { margin: 2px -6px; padding: 6px; border: 1px solid color-mix(in srgb, var(--green) 55%, transparent); border-radius: 3px; background: color-mix(in srgb, var(--green) 10%, transparent); }
+.garden-ui .control-row.altitude-row > span:first-child { color: var(--green); font-weight: 600; letter-spacing: .3px; }
+.garden-ui .control-row.altitude-row + .control-row.altitude-row { margin-top: 4px; }
+.garden-ui .controls-panel kbd, .garden-ui .alt-keys kbd { transition: background .08s, color .08s, border-color .08s; }
+.garden-ui kbd.held { background: var(--green); border-color: var(--green); color: #17140f; }
+.garden-ui .alt-keys { display: flex; flex-direction: column; gap: 3px; margin-left: 4px; }
+.garden-ui .alt-keys kbd { padding: 1px 4px; font-size: 7px; text-align: center; }
+.garden-ui .arena-actions button#controls-toggle[aria-pressed="true"] { border-color: var(--green); color: var(--green); }
+@media (max-width: 760px) {
+.garden-ui .controls-panel { width: 196px; max-height: calc(100dvh - 120px); overflow: auto; }
+
+}
+.garden-ui .controls-panel.dragging header { cursor: grabbing; }
+.garden-ui .controls-panel.dragging { box-shadow: 0 10px 30px #0007; }
+
+/* Honey thief: an information sign with the bump counter. */
+.garden-ui .heist-banner { position: absolute; z-index: 1100; left: 50%; top: 86px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(660px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #ffe08a; border-radius: 3px; background: #6b3f05eb; color: #fff6dc; font-size: 11px; letter-spacing: .4px; box-shadow: 0 6px 24px #0006; pointer-events: none; }
+.garden-ui .heist-banner strong { color: #ffd34d; letter-spacing: 1.2px; white-space: nowrap; }
+.garden-ui .heist-banner.saved { background: #24521feb; border-color: #b9f0a0; }
+.garden-ui .heist-banner.saved strong { color: #c9ff9e; }
+.garden-ui .heist-hits { display: flex; gap: 4px; }
+.garden-ui .heist-hits i { width: 13px; height: 15px; background: #ffffff33; clip-path: polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
+.garden-ui .heist-hits i.hit { background: #ffd34d; }
+.garden-ui .mission-status.draining strong { color: #ff7b5c; animation: garden-drain .5s ease-in-out infinite alternate; }
+@keyframes garden-drain { to { opacity: .45; } }
+
+/* Fullscreen menu bar with the main shortcuts, since the page's control strip is hidden. */
+.garden-ui .fs-bar { display: none; position: absolute; z-index: 1150; top: 0; left: 0; right: 0; height: 34px; align-items: center; justify-content: space-between; gap: 16px; padding: 0 14px; background: var(--panel-glass); border-bottom: 1px solid var(--line); font-size: 10px; color: var(--muted); pointer-events: auto; }
+.garden-ui.is-fullscreen .fs-bar { display: flex; }
+.garden-ui.is-fullscreen .arena-top { top: 34px; }
+.garden-ui .fs-keys, .garden-ui .fs-actions { display: flex; align-items: center; gap: 14px; white-space: nowrap; overflow: hidden; }
+.garden-ui .fs-actions { gap: 6px; }
+.garden-ui .fs-bar button { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel); color: var(--text); font-size: 10px; }
+.garden-ui .fs-bar button:hover { border-color: var(--green); }
+.garden-ui .fs-bar kbd { padding: 1px 5px; font-size: 8px; }
+@media (max-width: 900px) {
+.garden-ui .fs-keys { display: none; }
+
+}
+@media (max-width: 480px) {
+.garden-ui .heist-banner { top: 120px; flex-wrap: wrap; justify-content: center; font-size: 10px; }
+
+}
+
+/* Landing tour: cross-fade cover, captions, and a pulsing play button at the end. */
+.garden-ui .tour-cover { position: absolute; inset: 0; background: #0b0d08; opacity: 0; pointer-events: none; }
+.garden-ui .tour-caption { position: absolute; z-index: 1100; left: 50%; top: 84px; transform: translateX(-50%); width: min(520px, calc(100% - 32px)); padding: 14px 18px 12px; border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: 3px; background: var(--panel-glass); backdrop-filter: blur(12px); color: var(--text); pointer-events: none; }
+.garden-ui .tour-caption.show { animation: garden-caption .55s cubic-bezier(.2, .9, .3, 1.2) both; }
+.garden-ui .tour-caption small { display: block; margin-bottom: 6px; color: var(--green); font-size: 8px; letter-spacing: 1.2px; }
+.garden-ui .tour-caption strong { display: block; margin-bottom: 6px; font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
+.garden-ui .tour-caption span { display: block; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.garden-ui .tour-caption.finale { text-align: center; border-left-width: 1px; }
+.garden-ui .tour-caption.finale strong { font-size: 30px; color: var(--green); }
+.garden-ui .tour-dots { display: flex; gap: 5px; margin-top: 10px; }
+.garden-ui .tour-caption.finale .tour-dots { justify-content: center; }
+.garden-ui .tour-dots i { width: 16px; height: 3px; background: var(--line); }
+.garden-ui .tour-dots i.on { background: var(--green); }
+.garden-ui .play-button.pulse { animation: garden-pulse 1.1s ease-in-out infinite; }
+@keyframes garden-caption { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes garden-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); } 50% { transform: scale(1.14); box-shadow: 0 0 0 12px transparent; } }
+@media (max-width: 480px) {
+.garden-ui .tour-caption { top: 118px; padding: 11px 13px 10px; }
+.garden-ui .tour-caption strong { font-size: 15px; }
+.garden-ui .tour-caption.finale strong { font-size: 24px; }
+
+}
+@media (prefers-reduced-motion: reduce) {
+.garden-ui .tour-caption.show, .garden-ui .play-button.pulse { animation: none; }
+
+}
+/* HUD stays above speech bubbles. */
+.garden-ui .arena-top, .garden-ui .flight-hud, .garden-ui .intro, .garden-ui .mobile-controls { z-index: 1100; }
+
+/* Sound mixer inside the controls panel. */
+.garden-ui .mixer { margin-top: 8px; border-top: 1px solid var(--line); }
+.garden-ui .mixer summary { padding: 8px 0 6px; color: var(--green); font-size: 10px; letter-spacing: .4px; cursor: pointer; list-style: none; }
+.garden-ui .mixer summary::-webkit-details-marker { display: none; }
+.garden-ui .mixer summary::after { content: " ▸"; color: var(--muted); }
+.garden-ui .mixer[open] summary::after { content: " ▾"; }
+.garden-ui .mix-row { display: grid; grid-template-columns: 1fr 38px; align-items: center; gap: 2px 8px; padding: 3px 0; color: var(--muted); }
+.garden-ui .mix-row > span { grid-column: 1 / -1; font-size: 9px; }
+.garden-ui .mix-row.master > span { color: var(--text); font-weight: 600; }
+.garden-ui .mix-row output { color: var(--text); font-size: 9px; text-align: right; font-variant-numeric: tabular-nums; }
+.garden-ui .mix-row input[type="range"] { width: 100%; height: 16px; margin: 0; background: transparent; accent-color: var(--green); cursor: pointer; }
+.garden-ui .mix-row.master input[type="range"] { height: 18px; }
+.garden-ui #mixer-reset { width: 100%; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel); color: var(--text); font-size: 10px; }
+.garden-ui #mixer-reset:hover { border-color: var(--green); color: var(--green); }
+
+/* Nectar power: HUD meter, reminder overlay, and a golden edge glow in bee view. */
+.garden-ui .flight-hud .power > span { display: block; margin-bottom: 7px; color: var(--muted); font-size: 8px; letter-spacing: 1px; white-space: nowrap; }
+.garden-ui .power-pips { display: flex; gap: 3px; }
+.garden-ui .power-pips i { width: 9px; height: 9px; border-radius: 50%; background: #424860; }
+.garden-ui .power-pips i.on { background: #ffd23f; }
+.garden-ui .power.ready > span { color: #ffd23f; text-shadow: 0 0 8px #ffd23f99; }
+.garden-ui .power.ready .power-pips i { box-shadow: 0 0 6px #ffd23f; animation: garden-power .8s ease-in-out infinite alternate; }
+@keyframes garden-power { to { opacity: .55; } }
+.garden-ui .power-tip { position: absolute; z-index: 1100; left: 50%; bottom: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(620px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #ffd23f; border-radius: 3px; background: #3d2f05ee; color: #fff4cf; font-size: 11px; box-shadow: 0 0 24px #ffd23f66; pointer-events: none; animation: garden-tip .4s cubic-bezier(.2, 1.5, .4, 1) both; }
+.garden-ui .power-tip strong { color: #ffd23f; letter-spacing: 1.2px; white-space: nowrap; }
+@keyframes garden-tip { from { opacity: 0; transform: translate(-50%, 12px) scale(.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+.garden-ui.bee-view.powered::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 90px 12px #ffd23f55; animation: garden-power 1s ease-in-out infinite alternate; }
+@media (max-width: 760px) {
+.garden-ui .flight-hud .power { display: none; }
+.garden-ui .power-tip { bottom: 150px; flex-wrap: wrap; justify-content: center; font-size: 10px; }
+
+}
+.garden-ui .mix-row.track { grid-template-columns: 1fr; padding-top: 6px; border-top: 1px dashed var(--line); margin-top: 4px; }
+.garden-ui .mix-row.track > span { color: var(--text); }
+.garden-ui .mix-row select { width: 100%; padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel); color: var(--text); font: inherit; font-size: 10px; }
+.garden-ui .power small { display: block; margin-top: 6px; color: #ffd23f; font-size: 9px; letter-spacing: .6px; white-space: nowrap; }
+.garden-ui .power small.empty { color: var(--muted); }
+
+/* Score, heavy-load hint, and delivery points. */
+.garden-ui .flight-hud .score > span { display: block; color: var(--muted); font-size: 8px; letter-spacing: 1px; margin-bottom: 4px; }
+.garden-ui .score strong { display: block; font-size: 18px; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.garden-ui .score small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; letter-spacing: .6px; white-space: nowrap; }
+.garden-ui #bag-label.heavy { color: #f0a31c; }
+.garden-ui .load-tip { position: absolute; z-index: 1100; left: 50%; bottom: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(640px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #f0a31c; border-radius: 3px; background: #3a2408ee; color: #ffeccc; font-size: 11px; line-height: 1.5; pointer-events: none; animation: garden-tip .4s cubic-bezier(.2, 1.5, .4, 1) both; }
+.garden-ui .load-tip strong { color: #f7b53b; letter-spacing: 1.2px; white-space: nowrap; }
+.garden-ui .pow.points { background: none; clip-path: none; padding: 0; color: #ffd23f; font-size: 34px; -webkit-text-stroke: 2px #4a2c00; text-shadow: 3px 3px 0 #4a2c00, 0 0 18px #ffd23f99; }
+.garden-ui .intro small { display: block; margin-top: 6px; color: var(--green); font-size: 10px; letter-spacing: .4px; }
+@media (max-width: 760px) {
+.garden-ui .load-tip { bottom: 150px; flex-wrap: wrap; justify-content: center; font-size: 10px; }
 
 }

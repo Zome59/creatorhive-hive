@@ -175,114 +175,216 @@ export function createHoneyDrop() {
 }
 
 // ---------------------------------------------------------------- bumblebee
+// Every shape is baked at its final proportions, so nothing on the bee needs a non-uniform scale: normals, shading and silhouettes stay
+// clean from 2 units away. The torso is one smooth revolved surface (analytic normals, soft colour bands, a fine felt grain), the fur is a
+// dense, even layer of small soft tufts that stand on the surface normal, and the face parts are ellipsoids oriented to the skull.
 const BEE = { yellow: new THREE.Color('#f2c230'), black: new THREE.Color('#2d2a26'), white: new THREE.Color('#f3eee0') };
-const CUTS = [-0.8, -0.45, -0.05, 0.42];
-const bandAt = z => z < CUTS[0] ? BEE.white : z < CUTS[1] ? BEE.black : z < CUTS[2] ? BEE.yellow : z < CUTS[3] ? BEE.black : BEE.yellow;
-const Z_REAR = -1.02, Z_FRONT = 0.78, KY = 0.94;
-// Two overlapping ellipsoids (round abdomen, chubby thorax) blended with a 4-norm so there is no waist.
-function beeRadius(z) {
-  const e = (c, h, R) => { const q = (z - c) / h; return q * q < 1 ? R * Math.sqrt(1 - q * q) : 0; };
-  return Math.pow(e(-0.32, 0.7, 0.62) ** 4 + e(0.26, 0.52, 0.58) ** 4, 0.25);
+const BEE_BANDS = [BEE.white, BEE.black, BEE.yellow, BEE.black, BEE.yellow], BEE_CUTS = [-0.8, -0.45, -0.05, 0.42], BEE_BLEND = 0.055;
+const beeBand = (z, out) => { out.copy(BEE_BANDS[0]); BEE_CUTS.forEach((c, k) => out.lerp(BEE_BANDS[k + 1], smooth(c - BEE_BLEND, c + BEE_BLEND, z))); return out; };
+const beeShade = ny => 0.8 + 0.2 * smooth(-0.85, 0.35, ny); // a little occlusion: the belly is a touch darker than the back
+const BEE_SKULL = new THREE.Color('#35302a');
+const BEE_Z0 = -1.02, BEE_Z1 = 0.78, BEE_KY = 0.94, BEE_HEAD = new THREE.Vector3(0.44, 0.4, 0.38), BEE_HEAD_AT = new THREE.Vector3(0, -0.04, 0.84), TUFT_INSET = 0.03, SWELL = 0.05;
+// Round abdomen + chubby thorax as one smooth surface: r(z)^2 is the 4-norm blend of two ellipse lobes, so there is no waist and no crease.
+const beeLobe = (z, c, h, R) => { const q = (z - c) / h; return q * q < 1 ? R * R * (1 - q * q) : 0; };
+const beeLobeD = (z, c, h, R) => { const q = (z - c) / h; return q * q < 1 ? -2 * R * R * q / h : 0; };
+const beeF = z => Math.hypot(beeLobe(z, -0.32, 0.7, 0.62), beeLobe(z, 0.26, 0.52, 0.58));
+function beeSurface(z, phi, pos, nor) {
+  const a = beeLobe(z, -0.32, 0.7, 0.62), b = beeLobe(z, 0.26, 0.52, 0.58), f = Math.hypot(a, b), r = Math.sqrt(f), x = r * Math.cos(phi), y = r * BEE_KY * Math.sin(phi); pos.set(x, y, z);
+  if (f < 1e-9) return nor.set(0, 0, z < -0.3 ? -1 : 1);
+  const df = (a * beeLobeD(z, -0.32, 0.7, 0.62) + b * beeLobeD(z, 0.26, 0.52, 0.58)) / f; // gradient of x^2 + (y/KY)^2 - f(z)
+  return nor.set(x, y / (BEE_KY * BEE_KY), -df / 2).normalize();
 }
-function beePoint(z, phi, pos, nor) {
-  const r = beeRadius(z), x = r * Math.cos(phi), y = r * KY * Math.sin(phi); pos.set(x, y, z);
-  if (r < 1e-5) return nor.set(0, 0, z < 0 ? -1 : 1);
-  const dr = (beeRadius(z + 1e-3) - beeRadius(z - 1e-3)) / 2e-3; return nor.set(x, y / (KY * KY), -r * dr).normalize();
-}
-const beeBodyGeometry = () => once('beeBody', () => {
-  const rows = [];
-  for (let k = 0; k <= 24; k++) { const z = lerp(Z_REAR, Z_FRONT, (1 - Math.cos(Math.PI * k / 24)) / 2); if (CUTS.every(c => Math.abs(z - c) > 0.025)) rows.push({ z, c: bandAt(z) }); }
-  for (const c of CUTS) rows.push({ z: c - 1e-4, c: bandAt(c - 1e-3) }, { z: c + 1e-4, c: bandAt(c + 1e-3) }); // doubled rings give hard colour edges
-  rows.sort((a, b) => a.z - b.z);
-  const S = 22, pos = [], nor = [], col = [], idx = [], p = new THREE.Vector3(), n = new THREE.Vector3();
-  rows.forEach(({ z, c }) => { for (let j = 0; j < S; j++) { beePoint(z, j / S * TAU, p, n); pos.push(p.x, p.y, p.z); nor.push(n.x, n.y, n.z); col.push(c.r, c.g, c.b); } });
-  for (let i = 0; i < rows.length - 1; i++) for (let j = 0; j < S; j++) { const A = i * S + j, B = i * S + (j + 1) % S, C = (i + 1) * S + (j + 1) % S, D = (i + 1) * S + j; idx.push(A, B, C, A, C, D); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); return g;
+// A unit sphere stretched to the radii (a, b, c) with exact normals. Baked, so the mesh itself keeps scale 1.
+const beeEllipsoid = (a, b, c, w = 24, h = 16) => once(`bee:ellipsoid:${a},${b},${c},${w},${h}`, () => {
+  const g = new THREE.SphereGeometry(1, w, h), p = g.attributes.position, n = g.attributes.normal, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); p.setXYZ(i, x * a, y * b, z * c); v.set(x / a, y / b, z / c).normalize(); n.setXYZ(i, v.x, v.y, v.z); }
+  g.computeBoundingSphere(); g.computeBoundingBox(); return g;
 });
-// Fur: short cones with a darker root, one instanced draw call; each takes the colour of the band it sits in.
-const furGeometry = () => once('fur', () => {
-  const g = new THREE.ConeGeometry(0.065, 0.15, 6, 1, true); g.translate(0, 0.075, 0);
-  // Every normal points along the hair, so a tuft shades like the body under it instead of showing hard facets.
-  const p = g.attributes.position, n = g.attributes.normal, c = new Float32Array(p.count * 3); for (let i = 0; i < p.count; i++) { n.setXYZ(i, 0, 1, 0); c.fill(0.74 + 0.26 * clamp(p.getY(i) / 0.15), i * 3, i * 3 + 3); }
-  g.setAttribute('color', new THREE.BufferAttribute(c, 3)); return g;
+const beeSkullGeometry = () => once('bee:skull', () => { const g = beeEllipsoid(BEE_HEAD.x, BEE_HEAD.y, BEE_HEAD.z, 36, 24).clone(), n = g.attributes.normal, col = new Float32Array(n.count * 3), c = new THREE.Color(); for (let i = 0; i < n.count; i++) { c.copy(BEE_SKULL).multiplyScalar(beeShade(n.getY(i))); c.toArray(col, i * 3); } g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g; });
+const beeBall = (w = 10, h = 7) => once(`bee:ball:${w},${h}`, () => new THREE.SphereGeometry(1, w, h));
+// Point on an ellipsoid with radii `rad` in direction `d`, and the outward normal there.
+const beeOnEllipsoid = (d, rad, at, nor) => { d.normalize(); const k = 1 / Math.hypot(d.x / rad.x, d.y / rad.y, d.z / rad.z); at.copy(d).multiplyScalar(k); return nor.set(at.x / (rad.x * rad.x), at.y / (rad.y * rad.y), at.z / (rad.z * rad.z)).normalize(); };
+
+const beeBodyGeometry = () => once('bee:body', () => {
+  const N = 44, S = 44, W = S + 1, pos = [], nor = [], col = [], uv = [], idx = [], morph = [], rad = [], p = new THREE.Vector3(), n = new THREE.Vector3(), c = new THREE.Color();
+  for (let k = 0; k <= N; k++) {
+    const z = lerp(BEE_Z0, BEE_Z1, (1 - Math.cos(Math.PI * k / N)) / 2); beeBand(z, c); rad.push(beeF(z));
+    for (let j = 0; j <= S; j++) { // one extra vertex closes the seam, so the fur grain texture wraps cleanly
+      beeSurface(z, j / S * TAU, p, n); const shade = beeShade(n.y), grow = SWELL * smooth(0.1, -0.4, z); // the morph target lets the abdomen swell while it gulps
+      pos.push(p.x, p.y, p.z); nor.push(n.x, n.y, n.z); col.push(c.r * shade, c.g * shade, c.b * shade); morph.push(n.x * grow, n.y * grow, n.z * grow); uv.push(j / S * BEE_GRAIN_U, (z - BEE_Z0) * BEE_GRAIN_V);
+    }
+  }
+  for (let i = 0; i < N; i++) for (let j = 0; j < S; j++) {
+    const A = i * W + j, B = A + 1, D = A + W, C = D + 1; // the two pole rings collapse to a point: skip their zero-area triangles
+    if (rad[i] > 0) idx.push(A, B, C); if (rad[i + 1] > 0) idx.push(A, C, D);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  g.morphAttributes.position = [new THREE.Float32BufferAttribute(morph, 3)]; g.morphTargetsRelative = true; g.computeBoundingSphere(); g.computeBoundingBox(); return g;
 });
-function furMesh(entries) {
-  const m = new THREE.InstancedMesh(furGeometry(), vertexMat(1), entries.length);
-  entries.forEach((e, i) => { dummy.position.copy(e.pos).addScaledVector(e.nor, -0.04); dummy.quaternion.setFromUnitVectors(UP, e.nor); dummy.scale.set(e.s, e.s * e.len, e.s); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.setColorAt(i, e.color); });
-  m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; m.castShadow = true; m.receiveShadow = false; return m; // fur is too fine for the shadow map: it casts a fuzzy outline but never receives blocky self-shadow
+// Fine fur grain as a bump map built from raw bytes (no canvas): short strands that run along the body, wrapping in both directions.
+const BEE_GRAIN_U = 14, BEE_GRAIN_V = 5;
+const beeGrain = () => once('bee:grain', () => {
+  const n = 128, height = new Float32Array(n * n), r = rng(11), data = new Uint8Array(n * n * 4), wrap = i => ((i % n) + n) % n;
+  for (let i = 0; i < 1100; i++) { // each strand: a slightly wavy streak along v that fades in and out
+    const x0 = r() * n, y0 = r() * n, len = 6 + r() * 12, width = 0.9 + r() * 0.9, strength = (0.4 + 0.6 * r()) * 0.35;
+    for (let t = 0; t <= len; t += 0.5) for (let dx = -2; dx <= 2; dx++) { const k = Math.max(0, 1 - Math.abs(dx) / (width + 0.5)); if (k > 0) height[wrap(Math.floor(y0 + t)) * n + wrap(Math.floor(x0 + dx + 0.5 * Math.sin(t * 0.4 + i)))] += strength * Math.sin(Math.PI * t / len) * k; }
+  }
+  let max = 0; for (const v of height) max = Math.max(max, v);
+  for (let i = 0; i < n * n; i++) { const v = Math.round(255 * Math.min(1, height[i] / max * 1.6)); data.set([v, v, v, 255], i * 4); }
+  const t = new THREE.DataTexture(data, n, n, THREE.RGBAFormat); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.needsUpdate = true; return t;
+});
+// Torso and tufts share one material family (soft sheen, same colours); the torso and its fur also share the felt grain, so a tuft
+// continues the surface it grows from instead of reading as a separate tile.
+const beeFurMaterial = (grain = true) => once(`bee:fur:${grain}`, () => grain ? new THREE.MeshPhysicalMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.92, bumpMap: beeGrain(), bumpScale: 0.5, sheen: 0.35, sheenRoughness: 0.6, sheenColor: new THREE.Color('#fff1d6') }) : new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.9 }));
+
+// A tuft is a small, soft cone (0.052 base radius, 0.074 tall). Its normals lean strongly towards the hair axis so it shades like the body under
+// it, its base is buried in the surface, and all tufts of a mesh are baked into one geometry (positions, normals, colours, uvs, morph).
+const TUFT = { r: 0.052, h: 0.074, sides: 6, lean: 0.9 };
+const beeTuftTemplate = () => once('bee:tuft', () => {
+  const R = TUFT.sides, pos = [], nor = [], col = [], idx = [], v = new THREE.Vector3(), slope = Math.atan2(TUFT.r, TUFT.h);
+  for (let j = 0; j < R; j++) { const th = j / R * TAU, cs = Math.cos(th), sn = Math.sin(th); pos.push(cs * TUFT.r, 0, sn * TUFT.r); v.set(cs * Math.cos(slope), Math.sin(slope), sn * Math.cos(slope)).lerp(UP, TUFT.lean).normalize(); nor.push(v.x, v.y, v.z); col.push(0.94); }
+  pos.push(0, TUFT.h, 0); nor.push(0, 1, 0); col.push(1);
+  for (let j = 0; j < R; j++) idx.push(j, R, (j + 1) % R);
+  return { pos, nor, col, idx, n: R + 1 };
+});
+const beeJitter = new THREE.Euler(), beeQ = new THREE.Quaternion(), beeQ2 = new THREE.Quaternion(), beeV = new THREE.Vector3(), beeN = new THREE.Vector3();
+// pos/nor: the surface point and its normal; the tuft stands on the normal give or take a few degrees, with a random spin and one uniform scale.
+function beeTuft(r, pos, nor, color, s, w = 0) {
+  beeQ.setFromUnitVectors(UP, nor); beeQ.multiply(beeQ2.setFromEuler(beeJitter.set((r() - 0.5) * 0.24, r() * TAU, (r() - 0.5) * 0.24)));
+  return { pos: pos.clone(), nor: nor.clone(), q: beeQ.clone(), s, color, w };
 }
-function bodyFur(r) {
-  const out = [], pos = new THREE.Vector3(), nor = new THREE.Vector3(), K = 34;
+// Bakes all tufts into one geometry. `grain` gives them the torso's texture coordinates (continuous with the torso, whatever the seam does);
+// `w` is each tuft's share of the abdomen swell, stored as a morph target exactly like the torso's.
+function beeFurGeometry(entries, grain) {
+  const T = beeTuftTemplate(), n = entries.length * T.n, pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3), uv = grain ? new Float32Array(n * 2) : null, morph = new Float32Array(n * 3), idx = [], c = new THREE.Color();
+  entries.forEach((e, k) => {
+    const base = k * T.n, phiC = Math.atan2(e.pos.y / BEE_KY, e.pos.x), delta = SWELL * e.w;
+    for (let i = 0; i < T.n; i++) {
+      const o = (base + i) * 3; beeV.set(T.pos[i * 3], T.pos[i * 3 + 1], T.pos[i * 3 + 2]).multiplyScalar(e.s).applyQuaternion(e.q).add(e.pos).addScaledVector(e.nor, -TUFT_INSET); pos.set([beeV.x, beeV.y, beeV.z], o);
+      beeN.set(T.nor[i * 3], T.nor[i * 3 + 1], T.nor[i * 3 + 2]).applyQuaternion(e.q); nor.set([beeN.x, beeN.y, beeN.z], o);
+      c.copy(e.color).multiplyScalar(T.col[i]); col.set([c.r, c.g, c.b], o); morph.set([e.nor.x * delta, e.nor.y * delta, e.nor.z * delta], o);
+      if (uv) { const dPhi = Math.atan2(Math.sin(Math.atan2(beeV.y / BEE_KY, beeV.x) - phiC), Math.cos(Math.atan2(beeV.y / BEE_KY, beeV.x) - phiC)); uv[(base + i) * 2] = ((phiC + TAU) % TAU + dPhi) / TAU * BEE_GRAIN_U; uv[(base + i) * 2 + 1] = (beeV.z - BEE_Z0) * BEE_GRAIN_V; }
+    }
+    for (const i of T.idx) idx.push(base + i);
+  });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); if (uv) g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx); g.morphAttributes.position = [new THREE.BufferAttribute(morph, 3)]; g.morphTargetsRelative = true; g.computeBoundingSphere(); g.computeBoundingBox();
+  g.userData.tufts = entries.length; return g;
+}
+function beeFurMesh(geometry, material, name) {
+  const m = new THREE.Mesh(geometry, material); m.name = name; m.castShadow = m.receiveShadow = false; m.userData.tufts = geometry.userData.tufts; return m; // too fine for the shadow map: the smooth torso under it casts the (clean) shadow
+}
+function beeBodyFur(r, gap = 0.09) {
+  const out = [], M = 400, zs = [], ss = [0], pos = new THREE.Vector3(), nor = new THREE.Vector3(), c = new THREE.Color();
+  for (let i = 0; i <= M; i++) { const z = lerp(BEE_Z0, 0.62, i / M); zs.push(z); if (i) ss.push(ss[i - 1] + Math.hypot(z - zs[i - 1], Math.sqrt(beeF(z)) - Math.sqrt(beeF(zs[i - 1])))); } // arc length along the profile, so rows are evenly spaced on the surface
   const add = (z, phi) => {
-    beePoint(z, phi, pos, nor); const c = bandAt(z + (r() - 0.5) * 0.08).clone().multiplyScalar(0.9 + 0.2 * r());
-    out.push({ pos: pos.clone(), nor: nor.clone().add(new THREE.Vector3(0, 0, -0.3)).normalize(), color: c, s: 0.8 + 0.5 * r(), len: 0.8 + 0.5 * r() });
+    z = Math.max(BEE_Z0, z); beeSurface(z, phi, pos, nor); beeBand(z, c); const k = beeShade(nor.y) * (0.98 + 0.04 * r());
+    out.push(beeTuft(r, pos, nor, c.clone().multiplyScalar(k), 0.82 + 0.4 * r(), smooth(0.1, -0.4, z)));
   };
-  for (let k = 1; k < K; k++) {
-    const z = lerp(Z_REAR, Z_FRONT, (1 - Math.cos(Math.PI * k / K)) / 2); if (z > 0.7) continue;
-    const n = Math.max(4, Math.round(TAU * beeRadius(z) * (1 + KY) / 2 / 0.08)), off = r() * TAU;
-    for (let j = 0; j < n; j++) add(z + (r() - 0.5) * 0.04, off + (j + (r() - 0.5) * 0.8) / n * TAU);
+  for (let k = 0, s = gap * 0.5; s < ss[M]; k++, s += gap * 0.88) { // rows slightly closer than the in-row gap, each shifted by the golden angle
+    let i = 1; while (i < M && ss[i] < s) i++; const z = lerp(zs[i - 1], zs[i], (s - ss[i - 1]) / ((ss[i] - ss[i - 1]) || 1)), n = Math.max(1, Math.round(TAU * Math.sqrt(beeF(z)) * (1 + BEE_KY) / 2 / gap)), off = k * 2.39996;
+    for (let j = 0; j < n; j++) add(z + (r() - 0.5) * gap * 0.15, off + (j + (r() - 0.5) * 0.25) / n * TAU);
   }
-  for (let i = 0; i < 8; i++) add(Z_REAR + 0.01, i / 8 * TAU); // tail tuft
+  add(BEE_Z0, 0); // the pole itself
   return out;
 }
-const HEAD = { x: 0.44, y: 0.4, z: 0.38 };
-function headFur(r) {
-  const out = [], d = new THREE.Vector3(), N = 260;
+function beeHeadFur(r) {
+  const out = [], d = new THREE.Vector3(), at = new THREE.Vector3(), nor = new THREE.Vector3(), c = new THREE.Color(), N = 420;
   for (let i = 0; i < N; i++) {
-    const y = 1 - 2 * (i + 0.5) / N, rad = Math.sqrt(1 - y * y), th = i * 2.39996; d.set(Math.cos(th) * rad, y, Math.sin(th) * rad); if (d.z > 0.55 || d.y < -0.6) continue;
-    out.push({ pos: new THREE.Vector3(d.x * HEAD.x, d.y * HEAD.y, d.z * HEAD.z), nor: new THREE.Vector3(d.x / HEAD.x, d.y / HEAD.y, d.z / HEAD.z).normalize(), color: BEE.black.clone().multiplyScalar(0.9 + 0.25 * r()), s: 0.75 + 0.4 * r(), len: 0.75 + 0.4 * r() });
+    const y = 1 - 2 * (i + 0.5) / N, rad = Math.sqrt(1 - y * y), th = i * 2.39996; d.set(Math.cos(th) * rad, y, Math.sin(th) * rad);
+    if ((d.z > 0.3 && d.y < 0.78) || d.y < -0.5 || d.z < -0.35) continue; // face (eyes, cheeks, snout), chin and the part buried in the thorax stay bare
+    beeOnEllipsoid(d, BEE_HEAD, at, nor); c.copy(BEE_SKULL).multiplyScalar((0.98 + 0.04 * r()) * beeShade(nor.y));
+    out.push(beeTuft(r, at, nor, c.clone(), 0.75 + 0.3 * r()));
   }
   return out;
 }
-const legParts = () => once('legs', () => ({ upper: new THREE.CylinderGeometry(0.065, 0.055, 0.2, 6).translate(0, -0.1, 0), lower: new THREE.CylinderGeometry(0.05, 0.04, 0.18, 6).translate(0, -0.09, 0), ball: new THREE.SphereGeometry(1, 6, 4) }));
-const wingGeometry = side => once(`wing${side}`, () => new THREE.SphereGeometry(1, 10, 6).translate(side, 0, 0));
+
+const beeLimbs = () => once('bee:limbs', () => ({
+  upper: new THREE.CylinderGeometry(0.062, 0.052, 0.22, 8, 1).translate(0, -0.11, 0), lower: new THREE.CylinderGeometry(0.05, 0.038, 0.2, 8, 1).translate(0, -0.1, 0),
+  stalk1: new THREE.CylinderGeometry(0.02, 0.03, 0.3, 8, 1).translate(0, 0.15, 0), stalk2: new THREE.CylinderGeometry(0.014, 0.02, 0.22, 8, 1).translate(0, 0.11, 0),
+  tongue: new THREE.CylinderGeometry(0.034, 0.016, 1, 8, 1).translate(0, -0.5, 0),
+}));
+// A smooth leaf-shaped wing outline (curved edges, rounded root and tip) lying flat in the xz plane, root at the origin, reaching along +x for side=1.
+const beeWingGeometry = side => once(`bee:wing${side}`, () => {
+  const P = pts => pts.map(([x, y]) => [x * side, y]), s = new THREE.Shape(), seg = [[[0.12, -0.12], [0.45, -0.17], [0.66, -0.1]], [[0.8, -0.05], [0.85, 0.07], [0.72, 0.14]], [[0.55, 0.26], [0.22, 0.24], [0.02, 0.1]], [[-0.03, 0.07], [-0.03, 0.03], [0, 0.02]]];
+  s.moveTo(0, 0.02); for (const c of seg) { const [[a, b], [d, e], [f, g]] = P(c); s.bezierCurveTo(a, b, d, e, f, g); }
+  const g = new THREE.ShapeGeometry(s, 14); g.rotateX(-Math.PI / 2); g.computeBoundingSphere(); g.computeBoundingBox(); return g;
+});
 
 export function createBumblebee() {
-  const group = new THREE.Group(), body = new THREE.Group(), r = rng(7); group.add(body);
-  const fur = vertexMat(0.95), dark = std('#2d2a26', { roughness: 0.9 }), ball = legParts().ball;
-  put(body, beeBodyGeometry(), fur, 0, 0, 0, 'bee-body').receiveShadow = false; body.add(furMesh(bodyFur(r)));
+  const group = new THREE.Group(), body = new THREE.Group(); group.add(body);
+  const felt = beeFurMaterial(true), plain = beeFurMaterial(false), dark = std('#2d2a26', { roughness: 0.9 }), joint = std('#3a352f', { roughness: 0.85 }), L = beeLimbs();
+  const torso = put(body, beeBodyGeometry(), felt, 0, 0, 0, 'bee-body'); torso.receiveShadow = false; torso.morphTargetInfluences[0] = 0;
+  const torsoFur = beeFurMesh(once('bee:fur-torso', () => beeFurGeometry(beeBodyFur(rng(7)), true)), felt, 'bee-fur'); body.add(torsoFur);
 
-  const head = new THREE.Group(); head.position.set(0, -0.04, 0.84); body.add(head);
-  const skull = put(head, once('sphere', () => new THREE.SphereGeometry(1, 16, 12)), std('#35302a', { roughness: 0.9 }), 0, 0, 0, 'head'); skull.scale.set(HEAD.x, HEAD.y, HEAD.z); skull.receiveShadow = false; head.add(furMesh(headFur(r)));
-  const eyeMat = once('eye', () => new THREE.MeshPhysicalMaterial({ color: '#141216', roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 })), dot = unlit('#ffffff');
-  const face = (d, x, y, z) => new THREE.Vector3(d.x * x, d.y * y, d.z * z);
+  const head = new THREE.Group(); head.name = 'bee-head'; head.position.copy(BEE_HEAD_AT); body.add(head);
+  const skull = put(head, beeSkullGeometry(), plain, 0, 0, 0, 'head'); skull.receiveShadow = false; head.add(beeFurMesh(once('bee:fur-head', () => beeFurGeometry(beeHeadFur(rng(8)), false)), plain, 'bee-head-fur'));
+  const eyeMat = once('eye', () => new THREE.MeshPhysicalMaterial({ color: '#141216', roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 })), dot = unlit('#ffffff'), pink = std('#f29a8a', { transparent: true, opacity: 0.5, depthWrite: false });
+  const EYE = new THREE.Vector3(0.17, 0.2, 0.14), at = new THREE.Vector3(), nor = new THREE.Vector3(), up = new THREE.Vector3(0, 0, 1);
   for (const side of [-1, 1]) {
-    const c = face(new THREE.Vector3(side * 0.5, 0.22, 0.84).normalize(), HEAD.x * 0.9, HEAD.y * 0.9, HEAD.z * 0.9), E = { x: 0.17, y: 0.2, z: 0.14 };
-    const eye = put(head, once('sphere', () => new THREE.SphereGeometry(1, 16, 12)), eyeMat, c.x, c.y, c.z, `eye${side}`); eye.scale.set(E.x, E.y, E.z);
-    for (const [d, s] of [[new THREE.Vector3(-0.35, 0.55, 0.75), 0.04], [new THREE.Vector3(0.4, -0.35, 0.85), 0.02]]) { d.normalize(); const g = put(head, ball, dot, c.x + d.x * E.x * 0.96, c.y + d.y * E.y * 0.96, c.z + d.z * E.z * 0.96); g.scale.setScalar(s); g.castShadow = g.receiveShadow = false; }
-    const cheek = put(head, ball, std('#f29a8a', { transparent: true, opacity: 0.5, depthWrite: false }), side * 0.33, -0.12, 0.24); cheek.scale.set(0.08, 0.055, 0.02); cheek.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(side * 0.78, -0.18, 0.6).normalize()); cheek.castShadow = false;
+    // The eye is an ellipsoid whose short axis points along the skull normal, sunk 12% into the head: one clean, even rim all around.
+    beeOnEllipsoid(new THREE.Vector3(side * 0.5, 0.22, 0.84), BEE_HEAD, at, nor);
+    const eye = put(head, beeEllipsoid(EYE.x, EYE.y, EYE.z, 28, 18), eyeMat, at.x * 0.88, at.y * 0.88, at.z * 0.88, `eye${side}`); eye.quaternion.setFromUnitVectors(up, nor); eye.castShadow = false;
+    const unturn = eye.quaternion.clone().invert(); // glints are placed in head space so both eyes catch the light from the same side
+    for (const [d, s] of [[new THREE.Vector3(-0.35, 0.55, 0.75), 0.04], [new THREE.Vector3(0.4, -0.35, 0.85), 0.021]]) { const q = new THREE.Vector3(), n = beeOnEllipsoid(d.applyQuaternion(unturn), EYE, q, new THREE.Vector3()); const g = put(eye, beeBall(8, 6), dot, q.x + n.x * 0.004, q.y + n.y * 0.004, q.z + n.z * 0.004); g.scale.setScalar(s); g.castShadow = g.receiveShadow = false; }
+    beeOnEllipsoid(new THREE.Vector3(side * 0.78, -0.18, 0.6), BEE_HEAD, at, nor);
+    const cheek = put(head, beeEllipsoid(0.085, 0.056, 0.022, 14, 8), pink, at.x * 0.99, at.y * 0.99, at.z * 0.99); cheek.quaternion.setFromUnitVectors(up, nor); cheek.castShadow = false;
   }
-  put(head, ball, std('#5a4634'), 0, -0.14, 0.345).scale.set(0.11, 0.075, 0.075);
+  put(head, beeEllipsoid(0.11, 0.075, 0.075, 16, 10), std('#5a4634'), 0, -0.14, 0.345, 'snout');
+  // The proboscis hangs from under the snout; it is only shown while the bee drinks. Its length is the one scale it needs.
+  const proboscis = new THREE.Group(); proboscis.name = 'proboscis'; proboscis.position.set(0, -0.19, 0.38); proboscis.visible = false; head.add(proboscis);
+  const tongue = std('#c9803c', { roughness: 0.55 }), tube = put(proboscis, L.tongue, tongue, 0, 0, 0, 'proboscis-tube'), tip = put(proboscis, beeBall(10, 8), tongue, 0, 0, 0, 'proboscis-tip'); tube.castShadow = tip.castShadow = false; tube.scale.y = 0.01; tip.scale.setScalar(0.03);
+
   const antennae = [-1, 1].map(side => {
-    const base = new THREE.Group(), tip = new THREE.Group(); base.position.set(side * 0.145, 0.31, 0.16); base.rotation.set(0.35, 0, -side * 0.45); head.add(base);
-    put(base, once('stalk1', () => new THREE.CylinderGeometry(0.02, 0.03, 0.3, 5).translate(0, 0.15, 0)), dark); tip.position.y = 0.3; tip.rotation.x = 0.8; base.add(tip);
-    put(tip, once('stalk2', () => new THREE.CylinderGeometry(0.015, 0.02, 0.22, 5).translate(0, 0.11, 0)), dark); put(tip, ball, dark, 0, 0.23, 0).scale.setScalar(0.055); return { base, tip, side };
+    const base = new THREE.Group(), tipG = new THREE.Group(); base.position.set(side * 0.145, 0.31, 0.16); base.rotation.set(0.35, 0, -side * 0.45); head.add(base);
+    put(base, L.stalk1, dark); tipG.position.y = 0.3; tipG.rotation.x = 0.8; base.add(tipG);
+    put(tipG, beeBall(10, 8), dark, 0, 0, 0).scale.setScalar(0.024); put(tipG, L.stalk2, dark); put(tipG, beeBall(12, 9), dark, 0, 0.23, 0).scale.setScalar(0.055); return { base, tip: tipG, side };
   });
 
   // Wings are comically small on purpose; each one hinges at its root on top of the thorax.
   const wingMat = std('#eef7ff', { transparent: true, opacity: 0.55, roughness: 0.2, depthWrite: false, side: THREE.DoubleSide });
-  const wings = [-1, 1].map(side => { const hinge = new THREE.Group(); hinge.position.set(side * 0.16, 0.56, 0.12); body.add(hinge); const w = put(hinge, wingGeometry(side), wingMat); w.scale.set(0.38, 0.02, 0.18); w.castShadow = false; return { hinge, side }; });
+  const wings = [-1, 1].map(side => { const hinge = new THREE.Group(); hinge.position.set(side * 0.16, 0.56, 0.12); body.add(hinge); put(hinge, beeWingGeometry(side), wingMat, 0, 0, 0, 'wing').castShadow = false; return { hinge, side }; });
 
-  const { upper, lower } = legParts(), legs = [];
+  const legs = [];
   for (const side of [-1, 1]) [0.52, 0.12, -0.3].forEach((z, i) => {
     const hip = new THREE.Group(), knee = new THREE.Group(); hip.position.set(side * 0.3, -0.4, z); hip.rotation.z = side * 0.7; body.add(hip);
-    put(hip, upper, dark); knee.position.y = -0.2; knee.rotation.z = -side * 0.9; hip.add(knee); put(knee, lower, dark); put(knee, ball, std('#3a352f'), 0, -0.19, 0).scale.setScalar(0.065); legs.push({ hip, knee, side, i });
+    put(hip, L.upper, dark); knee.position.y = -0.22; knee.rotation.z = -side * 0.9; hip.add(knee); put(knee, beeBall(8, 6), joint, 0, 0, 0).scale.setScalar(0.056); put(knee, L.lower, dark); put(knee, beeBall(8, 6), joint, 0, -0.2, 0).scale.setScalar(0.064); legs.push({ hip, knee, side, i });
   });
 
-  let stun = 0;
+  // Pose weights ease towards their targets, so switching between flying, perching, drinking and flailing never snaps.
+  let stun = 0, perch = 0, drink = 0, flail = 0, swell = 0; const ease = (w, to, dt, rate) => w + (to - w) * (1 - Math.exp(-dt * rate)), sway = new THREE.Euler();
   return {
     group,
     update(dt, elapsed, state) {
-      const { speed = 0, stunned = false } = state || {};
-      stun += ((stunned ? 1 : 0) - stun) * (1 - Math.exp(-Math.max(0, dt || 0) * 8));
-      const mv = clamp(speed / 6, 0, 2), m = Math.min(1, mv), amp = 0.35 + 0.65 * m, e = elapsed;
-      body.position.y = Math.sin(e * 3.3) * (0.05 + 0.03 * m) - 0.1 * stun;
-      body.rotation.set(0.16 * m + Math.sin(e * 2.7 + 1) * 0.05 * amp + Math.sin(e * 5.3) * 0.22 * stun, Math.sin(e * 1.7) * 0.05 * amp + Math.sin(e * 4.1) * 0.3 * stun, Math.sin(e * 2.1) * 0.06 * amp + Math.sin(e * 6.4) * 0.35 * stun);
-      head.rotation.set(Math.sin(e * 3.3 - 0.8) * 0.07 * amp - 0.05 * m, 0, Math.sin(e * 7) * 0.3 * stun);
-      const flap = lerp(Math.sin(e * 60), Math.sin(e * 17) * 0.55, stun);
-      for (const w of wings) w.hinge.rotation.set(0, w.side * 0.4, w.side * (0.5 + 0.55 * flap)); // sweep back, flap about the fore-aft axis
-      for (const a of antennae) { a.base.rotation.set(0.35 + Math.sin(e * 5 + a.side) * 0.12 * amp + 0.5 * stun, 0, -a.side * (0.45 + Math.sin(e * 4 + a.side * 2) * 0.1 * amp + 0.2 * stun)); a.tip.rotation.x = 0.8 + Math.sin(e * 6 + a.side) * 0.12 + 0.4 * stun; }
-      for (const l of legs) { l.hip.rotation.set(Math.sin(e * 4.2 + l.i * 1.1 + l.side * 0.8) * 0.2 * amp + 0.35 * m + Math.sin(e * 3 + l.i) * 0.3 * stun, 0, l.side * (0.7 + Math.sin(e * 3.1 + l.i) * 0.08)); l.knee.rotation.set(Math.sin(e * 4.2 + l.i * 1.1 + 1.5) * 0.15 * amp, 0, -l.side * (0.9 - 0.25 * m)); }
+      const { speed = 0, stunned = false, perched = false, sucking = false, flailing = false } = state || {}, e = elapsed; dt = Math.max(0, dt || 0);
+      stun = ease(stun, stunned ? 1 : 0, dt, 8); flail = ease(flail, flailing ? 1 : 0, dt, 10); perch = ease(perch, perched && !flailing ? 1 : 0, dt, 3.5); drink = ease(drink, perched && sucking && !flailing ? 1 : 0, dt, 5);
+      const mv = clamp(speed / 6, 0, 2) * (1 - perch), m = Math.min(1, mv), amp = (0.35 + 0.65 * m) * (1 - 0.5 * perch), sk = drink * perch;
+      const gulpAt = Math.sin(Math.PI * 1.5 * e), gulp = sk * (0.12 + 0.88 * gulpAt * gulpAt), pump = Math.sin(TAU * 1.5 * e); // one gulp every 2/3 s
+      body.position.y = lerp(Math.sin(e * 3.3) * (0.05 + 0.03 * m), -0.2 + Math.sin(e * 1.7) * 0.022, perch) - 0.1 * stun + Math.sin(e * 11) * 0.05 * flail;
+      body.rotation.set(0.16 * m + Math.sin(e * 2.7 + 1) * 0.05 * amp + Math.sin(e * 5.3) * 0.22 * stun + perch * (0.3 + Math.sin(e * 1.7 + 0.6) * 0.012) - 0.03 * gulp + Math.sin(e * 7.7) * 0.25 * flail, Math.sin(e * 1.7) * 0.05 * amp + Math.sin(e * 4.1) * 0.3 * stun + Math.sin(e * 6.1) * 0.2 * flail, Math.sin(e * 2.1) * 0.06 * amp + Math.sin(e * 6.4) * 0.35 * stun + Math.sin(e * 8.3) * 0.3 * flail);
+      head.rotation.set(Math.sin(e * 3.3 - 0.8) * 0.07 * amp - 0.05 * m - 0.1 * perch + 0.07 * gulp, 0, Math.sin(e * 7) * 0.3 * stun + Math.sin(e * 9.3) * 0.2 * flail);
+      // Gulp: the abdomen swells (morph target + the tufts riding on it), the proboscis pumps and hangs straight down whatever the head does.
+      if (Math.abs(gulp - swell) > 1e-3) { swell = gulp; torso.morphTargetInfluences[0] = torsoFur.morphTargetInfluences[0] = swell; }
+      proboscis.visible = sk > 0.01;
+      if (proboscis.visible) {
+        const len = 0.72 * easeOut(sk) * (1 + 0.09 * pump), bulge = 1 + 0.25 * Math.max(0, pump); proboscis.quaternion.copy(beeQ.copy(body.quaternion).multiply(head.quaternion).invert()).multiply(beeQ2.setFromEuler(sway.set(0.1 + 0.05 * pump, 0, Math.sin(e * 1.1) * 0.04)));
+        tube.scale.set(bulge, Math.max(0.01, len), bulge); tip.position.y = -len; tip.scale.setScalar(0.03 * bulge);
+      }
+      const flap = lerp(lerp(Math.sin(e * 60), Math.sin(e * 17) * 0.55, stun), Math.sin(e * 83) * 1.2, flail);
+      for (const w of wings) w.hinge.rotation.set(0, w.side * (lerp(0.4, 1.15, perch) + 0.3 * flail * Math.sin(e * 9)), w.side * lerp(0.5 + 0.55 * flap, 0.16 + 0.05 * Math.sin(e * 1.9 + w.side) + 0.05 * sk * pump, perch)); // sweep back, flap about the fore-aft axis; perched they rest folded back
+      for (const a of antennae) {
+        const s = a.side, twitch = sk * Math.sin(e * 12 + s * 2), wild = flail * Math.sin(e * 15 + s * 3);
+        a.base.rotation.set(0.35 + Math.sin(e * 5 + s) * 0.12 * amp + 0.5 * stun + 0.15 * perch + 0.2 * twitch + 0.7 * wild, 0, -s * (0.45 + Math.sin(e * 4 + s * 2) * 0.1 * amp + 0.2 * stun + 0.14 * sk * Math.sin(e * 9.5 + s) + 0.55 * flail * Math.sin(e * 13 + s)));
+        a.tip.rotation.x = 0.8 + Math.sin(e * 6 + s) * 0.12 + 0.4 * stun + 0.18 * sk * Math.sin(e * 14 + s) + 0.7 * flail * Math.sin(e * 17 + s);
+      }
+      const reach = [-0.42, -0.05, 0.32];
+      for (const l of legs) {
+        const s = l.side, ph = e * 4.2 + l.i * 1.1 + s * 0.8, i = l.i; // perched legs reach down and outward, front ones forward, rear ones back, and hold on
+        const fx = Math.sin(ph) * 0.2 * amp + 0.35 * m + Math.sin(e * 3 + i) * 0.3 * stun, px = reach[i] + Math.sin(e * 1.3 + i) * 0.02 + 0.05 * gulp * (i - 1);
+        const fz = 0.7 + Math.sin(e * 3.1 + i) * 0.08, pz = 0.98 + 0.03 * gulp, kx = Math.sin(ph + 1.5) * 0.15 * amp, kz = 0.9 - 0.25 * m, pk = 0.62 + 0.06 * gulp;
+        l.hip.rotation.set(lerp(lerp(fx, px, perch), Math.sin(e * 11 + i * 1.9 + s * 2.3), flail), 0, s * lerp(lerp(fz, pz, perch), 0.9 + Math.sin(e * 9 + i * 2.1) * 0.6, flail));
+        l.knee.rotation.set(lerp(lerp(kx, 0.04 * gulp, perch), Math.sin(e * 13 + i * 1.3 + s) * 0.6, flail), 0, -s * lerp(lerp(kz, pk, perch), 0.9 + Math.sin(e * 10 + i + s) * 0.6, flail));
+      }
     },
   };
 }

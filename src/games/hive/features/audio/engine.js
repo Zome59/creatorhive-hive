@@ -1,9 +1,9 @@
-import { HIVE_SOUNDS, soundFiles } from './manifest.js';
+import { HIVE_SOUNDS, MIXER, MIX_MAX, soundFiles } from './manifest.js';
 
 const BASE = import.meta.env?.BASE_URL ?? '/';
 const SETTINGS = new Map(HIVE_SOUNDS.map(sound => [sound.name, sound]));
 // Inverse distance model: full volume within REF of the player bee, then falling off smoothly.
-export const SPATIAL = Object.freeze({ ref: 1.6, rolloff: 2, max: 80 });
+export const SPATIAL = Object.freeze({ ref: 1.6, rolloff: 2.6, max: 80 });
 export const distanceGain = d => SPATIAL.ref / (SPATIAL.ref + SPATIAL.rolloff * (Math.min(Math.max(d, SPATIAL.ref), SPATIAL.max) - SPATIAL.ref));
 
 // Encoder padding can leave a few silent samples at the ends of an MP3; loops skip them.
@@ -28,7 +28,9 @@ async function defaultLoad(file) {
 // Created on the first play gesture. Loops are keyed (one buzz per bee); one-shots are fire-and-forget.
 export function createHiveAudio({ createContext = defaultContext, load = defaultLoad, random = Math.random } = {}) {
   let context = null, master, enabled = false, running = false, volume = 0.85;
-  const buffers = new Map(), loops = new Map(), voices = new Set();
+  const buffers = new Map(), loops = new Map(), voices = new Set(), buses = new Map(), requested = new Set();
+  const levels = new Map(MIXER.map(channel => [channel.id, 1]));
+  const output = bus => buses.get(bus) ?? master;
   function setup() {
     if (context) return context;
     try {
@@ -37,14 +39,19 @@ export function createHiveAudio({ createContext = defaultContext, load = default
       const compressor = context.createDynamicsCompressor();
       compressor.threshold.value = -14; compressor.knee.value = 10; compressor.ratio.value = 5;
       master.connect(compressor); compressor.connect(context.destination);
+      // One gain per mixer channel, all feeding the master (whose level is the master slider).
+      for (const channel of MIXER) if (channel.id !== 'master') { const bus = context.createGain(); bus.gain.value = levels.get(channel.id); bus.connect(master); buses.set(channel.id, bus); }
     } catch { context = null; master = null; return null; } // No Web Audio: the game stays silent.
-    for (const file of HIVE_SOUNDS.flatMap(soundFiles)) {
-      Promise.resolve().then(() => load(file)).then(data => context.decodeAudioData(data)).then(buffer => buffers.set(file, buffer)).catch(() => {});
-    }
+    for (const file of HIVE_SOUNDS.filter(sound => !sound.lazy).flatMap(soundFiles)) fetchFile(file);
     return context;
+  }
+  function fetchFile(file) {
+    if (requested.has(file)) return; requested.add(file);
+    Promise.resolve().then(() => load(file)).then(data => context.decodeAudioData(data)).then(buffer => buffers.set(file, buffer)).catch(() => requested.delete(file));
   }
   function buffer(name) {
     const sound = SETTINGS.get(name); if (!sound) return null;
+    if (sound.lazy) soundFiles(sound).forEach(fetchFile); // Big files (music) load on first use.
     const files = soundFiles(sound).filter(file => buffers.has(file));
     return files.length ? buffers.get(files[Math.floor(random() * files.length)]) : null;
   }
@@ -62,7 +69,7 @@ export function createHiveAudio({ createContext = defaultContext, load = default
   function apply() {
     if (!master) return;
     master.gain.cancelScheduledValues(context.currentTime);
-    master.gain.setTargetAtTime(enabled ? volume : 0, context.currentTime, 0.05);
+    master.gain.setTargetAtTime(enabled ? volume * levels.get('master') : 0, context.currentTime, 0.05);
   }
   function stopLoop(key) {
     const loop = loops.get(key); if (!loop) return;
@@ -72,6 +79,15 @@ export function createHiveAudio({ createContext = defaultContext, load = default
   return {
     get enabled() { return enabled; },
     get ready() { return buffers.size > 0; },
+    level(id) { return levels.get(id) ?? 1; },
+    // Mixer slider: 0 (silent) to MIX_MAX; applies immediately and to sounds created later.
+    setLevel(id, value) {
+      if (!levels.has(id) || !Number.isFinite(value)) return;
+      levels.set(id, Math.max(0, Math.min(MIX_MAX, value)));
+      if (id === 'master') apply();
+      else if (buses.has(id)) buses.get(id).gain.setTargetAtTime(levels.get(id), context.currentTime, 0.03);
+    },
+    resetLevels() { for (const id of levels.keys()) this.setLevel(id, 1); },
     // Must be called from a user gesture the first time so browsers allow playback.
     setEnabled(value) {
       enabled = !!value;
@@ -87,21 +103,22 @@ export function createHiveAudio({ createContext = defaultContext, load = default
         for (const [param, value] of [[l.positionX, x], [l.positionY, y], [l.positionZ, z], [l.forwardX, fx], [l.forwardY, fy], [l.forwardZ, fz], [l.upX, 0], [l.upY, 1], [l.upZ, 0]]) param.setTargetAtTime(value, t, 0.03);
       } else { l.setPosition(x, y, z); l.setOrientation(fx, fy, fz, 0, 1, 0); }
     },
-    play(name, at = null, { gain = 1, rate = 1, delay = 0 } = {}) {
+    play(name, at = null, { gain = 1, rate = 1, delay = 0, bus } = {}) {
       if (!enabled || !running || !context || voices.size > 28) return false;
       const data = buffer(name); if (!data) return false;
       const source = context.createBufferSource(), level = context.createGain(), node = at ? panner() : null;
       source.buffer = data; source.playbackRate.value = rate * (0.95 + random() * 0.1);
       level.gain.value = gain * SETTINGS.get(name).gain;
       source.connect(level);
-      if (node) { place(node, at, false); level.connect(node); node.connect(master); } else level.connect(master);
+      const target = output(bus ?? SETTINGS.get(name).bus);
+      if (node) { place(node, at, false); level.connect(node); node.connect(target); } else level.connect(target);
       const voice = { source }; voices.add(voice);
       source.onended = () => { voices.delete(voice); source.disconnect(); level.disconnect(); node?.disconnect(); };
       source.start(context.currentTime + delay);
       return true;
     },
     // Creates the loop on first use, then updates its position, volume, and pitch every frame.
-    loop(key, name, { x, y, z, gain = 1, rate = 1, spatial = true } = {}) {
+    loop(key, name, { x, y, z, gain = 1, rate = 1, spatial = true, bus } = {}) {
       if (!enabled || !running || !context) return false;
       let loop = loops.get(key);
       if (!loop) {
@@ -109,7 +126,8 @@ export function createHiveAudio({ createContext = defaultContext, load = default
         const source = context.createBufferSource(), level = context.createGain(), node = spatial ? panner() : null, bounds = loopBounds(data);
         Object.assign(source, { buffer: data, loop: true, loopStart: bounds.start, loopEnd: bounds.end });
         level.gain.value = 0; source.connect(level);
-        if (node) { place(node, { x, y, z }, false); level.connect(node); node.connect(master); } else level.connect(master);
+        const target = output(bus ?? SETTINGS.get(name).bus);
+        if (node) { place(node, { x, y, z }, false); level.connect(node); node.connect(target); } else level.connect(target);
         source.start(0, bounds.start + random() * (bounds.end - bounds.start));
         loop = { source, gain: level, panner: node, name }; loops.set(key, loop);
       }
