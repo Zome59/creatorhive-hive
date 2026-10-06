@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, RULES, FLOWERS } from '../src/games/hive/simulation.js';
+import { Game, RULES, FLOWERS, BOOST } from '../src/games/hive/simulation.js';
+import { WORLD } from '../src/games/hive/world.js';
 
 test('nectar collects at flowers, caps at eight, and scores only at the hive', () => {
   const game = new Game({ bots: 0 }); const bee = game.addPlayer();
-  Object.assign(bee, { x: FLOWERS[0].x, y: 2, z: FLOWERS[0].z });
+  Object.assign(bee, { x: FLOWERS[0].x, y: FLOWERS[0].y, z: FLOWERS[0].z });
   for (let i = 0; i < 100; i++) game.tick(0.1);
   assert.equal(bee.bag, RULES.capacity); assert.equal(bee.score, 0); assert.equal(game.honey, 0);
-  bee.x = 0; bee.z = 0; game.tick(0.05);
+  Object.assign(bee, { x: 0, y: 2, z: 3 }); game.tick(0.05);
   assert.equal(bee.bag, 0); assert.equal(bee.score, 8); assert.equal(game.honey, 8);
 });
 test('movement bounds, stale inputs, and invalid numeric inputs cannot corrupt the world', () => {
@@ -15,14 +16,15 @@ test('movement bounds, stale inputs, and invalid numeric inputs cannot corrupt t
   game.setInput(bee.id, { x: Infinity, y: NaN, z: '100' }); game.tick(0.1);
   assert.equal(bee.y, 2); assert.ok(Number.isFinite(bee.x));
   for (let i = 0; i < 150; i++) { game.setInput(bee.id, { x: 1, y: 1, z: 1 }); game.tick(0.1); }
-  assert.ok(Math.hypot(bee.x, bee.z) <= RULES.radius + 0.0001); assert.equal(bee.y, 2);
-  for (let i = 0; i < 8; i++) game.tick(0.1);
+  assert.ok(Math.hypot(bee.x, bee.z) <= RULES.radius + 0.0001); assert.equal(bee.y, WORLD.ceiling);
+  // Stale input stops the bee once any collision knockback has faded.
+  for (let i = 0; i < 30; i++) game.tick(0.1);
   const x = bee.x; game.tick(0.1); assert.equal(bee.x, x);
 });
 test('boost has a cooldown and round victory resets inventory and scores', () => {
   const game = new Game({ bots: 0 }); const bee = game.addPlayer();
   game.setInput(bee.id, { x: 1, dash: true }); game.tick(0.05);
-  assert.equal(bee.boost, 4); game.tick(0.05); assert.ok(bee.boost < 4);
+  assert.equal(bee.boost, BOOST.cooldown); game.tick(0.05); assert.ok(bee.boost < BOOST.cooldown);
   game.honey = RULES.goal; game.tick(0.05); assert.equal(game.result, 'complete');
   bee.bag = 5; bee.score = 50;
   for (let i = 0; i < 125; i++) game.tick(0.1);

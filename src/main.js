@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createGameHost } from './game-host.js';
 import { openDisplaySettings } from './display-settings.js';
+import { toggleFullscreen } from './fullscreen.js';
 import './style.css';
 
 // Folder discovery lets contributors add a game without editing this shell.
@@ -24,6 +25,7 @@ function notify(message) {
   $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toastTimer);
   toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 2600);
 }
+const arenaFullscreen = () => toggleFullscreen(document.querySelector('.arena'));
 let renderer, host;
 try {
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -31,14 +33,14 @@ try {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
   $('world').appendChild(renderer.domElement);
-  host = createGameHost({ games, renderer, container: $('game-ui'), controls: $('controls'), navigation: document.querySelector('nav'), arena: document.querySelector('.arena'), notify, openDialog, closeDialog, clearNotification: () => { clearTimeout(toastTimer); $('toast').classList.remove('visible'); } });
+  host = createGameHost({ games, renderer, container: $('game-ui'), controls: $('controls'), navigation: document.querySelector('nav'), arena: document.querySelector('.arena'), notify, openDialog, closeDialog, clearNotification: () => { clearTimeout(toastTimer); $('toast').classList.remove('visible'); }, toggleFullscreen: arenaFullscreen });
   renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); host.pause(); notify('Graphics paused. Refresh to restore the game.'); });
   host.select(games[0].id);
 } catch (error) {
   console.error(error);
   $('game-ui').innerHTML = '<div class="intro"><div><h2>WebGL 2 required.</h2><p>Enable hardware acceleration to play.</p></div></div>';
 }
-$('settings-button').onclick = () => openDisplaySettings({ openDialog, notify, pause: () => host?.pause() });
+$('settings-button').onclick = () => openDisplaySettings({ openDialog, notify, pause: () => host?.pause(), toggleFullscreen: arenaFullscreen });
 function resize() {
   if (!renderer) return;
   const { width, height } = $('world').getBoundingClientRect();

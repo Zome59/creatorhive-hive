@@ -60,3 +60,54 @@
 }
 .garden-ui { position: absolute; inset: 0; pointer-events: none; }
 .garden-ui button { pointer-events: auto; }
+.garden-ui .arena-actions button[aria-pressed="true"]#view { border-color: var(--green); color: var(--green); }
+.garden-ui .scene-label { top: 0; left: 0; transform: translate(-50%, -100%); will-change: transform; }
+.garden-ui .altitude { display: flex; align-items: center; gap: 7px; }
+.garden-ui .flight-hud .altitude > span { margin: 0; color: var(--muted); font-size: 8px; letter-spacing: 1px; }
+.garden-ui .alt-track { position: relative; width: 6px; height: 30px; background: #424860; border-radius: 3px; }
+.garden-ui .alt-track i { position: absolute; left: -3px; width: 12px; height: 4px; border-radius: 2px; background: var(--green); bottom: 0; transition: bottom .1s; }
+.garden-ui .altitude strong { min-width: 30px; font-size: 11px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.garden-ui.bee-view::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 58%, #1c160a55 82%, #1c160a99 100%); }
+.garden-ui .reticle { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff6d6cc; border-radius: 50%; box-shadow: 0 0 6px #0008; pointer-events: none; }
+
+/* Comic speech bubbles and sound words, positioned every frame from the 3D scene. */
+.garden-ui .speech-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.garden-ui .bubble-anchor { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform, opacity; }
+.garden-ui .bubble { position: absolute; left: 0; bottom: 14px; transform: translateX(-50%) rotate(var(--tilt, 0deg)); width: max-content; max-width: 210px; padding: 8px 13px 9px; border: 3px solid #17140f; border-radius: 22px; background: #fffef6; color: #17140f; box-shadow: 4px 4px 0 #17140f; font: 700 15px/1.12 "Comic Sans MS", "Comic Neue", "Chalkboard SE", "Marker Felt", "Segoe Print", cursive; text-align: center; letter-spacing: .2px; animation: garden-bubble-pop .32s cubic-bezier(.2, 1.6, .4, 1) both; }
+.garden-ui .bubble::before, .garden-ui .bubble::after { content: ""; position: absolute; left: calc(50% - 12px); border-style: solid; }
+.garden-ui .bubble::before { bottom: -19px; border-width: 19px 9px 0 9px; border-color: #17140f transparent transparent transparent; transform: skewX(-18deg); }
+.garden-ui .bubble::after { bottom: -12px; left: calc(50% - 9px); border-width: 13px 6px 0 6px; border-color: #fffef6 transparent transparent transparent; transform: skewX(-18deg); }
+.garden-ui .bubble.shout { padding: 11px 16px 12px; border-radius: 6px; background: #fff3a8; color: #b3170f; text-transform: uppercase; font-size: 16px; box-shadow: 4px 4px 0 #17140f, 0 0 0 3px #fff3a8 inset; animation: garden-bubble-pop .26s cubic-bezier(.2, 1.8, .4, 1) both, garden-bubble-shake .5s .26s ease-in-out 2; }
+.garden-ui .bubble.shout::after { border-color: #fff3a8 transparent transparent transparent; }
+.garden-ui .bubble.bumble { font-size: 18px; background: #fff; color: #5a3b06; border-radius: 30px; }
+.garden-ui .pow { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)); padding: 14px 18px; background: #ffd23f; clip-path: polygon(50% 0, 61% 22%, 86% 8%, 79% 34%, 100% 44%, 79% 58%, 92% 84%, 64% 74%, 52% 100%, 40% 76%, 12% 90%, 21% 62%, 0 50%, 22% 38%, 10% 12%, 37% 22%); color: #fff; font: 900 21px/1 Impact, "Arial Black", "Comic Sans MS", sans-serif; letter-spacing: 1px; -webkit-text-stroke: 1.5px #17140f; paint-order: stroke fill; text-shadow: 2px 2px 0 #17140f; animation: garden-pow .95s ease-out both; }
+.garden-ui .pow.thud { background: #8fd0ff; font-size: 18px; }
+.garden-ui .pow.bumble { background: #ff6b3d; font-size: 28px; padding: 20px 24px; }
+@keyframes garden-bubble-pop { from { opacity: 0; transform: translateX(-50%) scale(.2) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: translateX(-50%) scale(1) rotate(var(--tilt, 0deg)); } }
+@keyframes garden-bubble-shake { 25% { margin-left: -3px; } 75% { margin-left: 3px; } }
+@keyframes garden-pow { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(var(--tilt, 0deg)); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(var(--tilt, 0deg)); } 30% { transform: translate(-50%, -50%) scale(1) rotate(var(--tilt, 0deg)); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.95) rotate(var(--tilt, 0deg)); } }
+
+/* Bumblebee warning: red pulse at the screen edges and a direction marker. */
+.garden-ui .bumble-alert { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 86px; pointer-events: none; box-shadow: inset 0 0 140px 30px #e0241bb0; background: #c01a1222; animation: garden-alert-pulse .6s ease-in-out infinite alternate; }
+.garden-ui .alert-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 2px solid #ffd9d2; border-radius: 3px; background: #b3170fe6; color: #fff; font-size: 12px; letter-spacing: 1.5px; box-shadow: 0 6px 24px #0006; }
+.garden-ui .alert-banner strong { font-weight: 800; }
+.garden-ui .alert-banner em { min-width: 22px; padding: 2px 6px; border-radius: 2px; background: #fff; color: #b3170f; font-style: normal; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+@keyframes garden-alert-pulse { from { box-shadow: inset 0 0 90px 10px #e0241b80; background: #c01a1210; } to { box-shadow: inset 0 0 170px 40px #e0241bc8; background: #c01a1230; } }
+.garden-ui .bumble-marker { position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; background: #d4251bdd; box-shadow: 0 0 0 4px #d4251b55; font-size: 21px; pointer-events: none; will-change: transform; }
+.garden-ui .bumble-marker i { position: absolute; inset: -12px; transform: rotate(var(--angle, 0deg)); }
+.garden-ui .bumble-marker i::after { content: ""; position: absolute; left: 50%; top: 0; margin-left: -7px; border: 7px solid transparent; border-bottom: 10px solid #fff; border-top: 0; }
+@media (prefers-reduced-motion: reduce) {
+.garden-ui .bubble, .garden-ui .bubble.shout, .garden-ui .pow, .garden-ui .bumble-alert { animation: none; }
+
+}
+@media (max-width: 480px) {
+.garden-ui .altitude { display: none; }
+.garden-ui .bubble { max-width: 150px; font-size: 12px; padding: 6px 10px; }
+.garden-ui .bumble-alert { padding-top: 120px; }
+.garden-ui .alert-banner { font-size: 10px; gap: 8px; }
+
+}
+@media (pointer: coarse) {
+.garden-ui .mobile-controls button[data-key="Space"], .garden-ui .mobile-controls button[data-key="KeyC"] { font-size: 13px; }
+
+}

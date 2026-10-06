@@ -8,13 +8,16 @@ function files(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(resolve(dir, entry.name)) : [resolve(dir, entry.name)]);
 }
 function checkCss(text, prefix, file) {
+  text = text.replace(/\/\*[\s\S]*?\*\//g, '');
   let position = 0;
   while (position < text.length) {
     const start = text.indexOf('{', position); if (start < 0) break;
     const selector = text.slice(position, start).trim(); let end = start + 1, depth = 1;
     while (depth && end < text.length) { if (text[end] === '{') depth++; if (text[end] === '}') depth--; end++; }
     const body = text.slice(start + 1, end - 1);
-    if (selector.startsWith('@media') || selector.startsWith('@supports')) checkCss(body, prefix, file);
+    // Keyframe names are global, so they must carry the game's prefix (e.g. `garden-` for `.garden-ui`).
+    if (selector.startsWith('@keyframes')) { if (!selector.slice(10).trim().startsWith(`${prefix.replace(/-ui$/, '')}-`)) throw new Error(`${file}: keyframes must be prefixed: ${selector}`); }
+    else if (selector.startsWith('@media') || selector.startsWith('@supports')) checkCss(body, prefix, file);
     else if (!selector.split(',').every(part => new RegExp(`^\\.${prefix}(?:[\\s:.#\\[]|$)`).test(part.trim()))) throw new Error(`${file}: game CSS must be scoped to .${prefix}: ${selector}`);
     position = end;
   }

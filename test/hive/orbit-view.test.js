@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Window } from 'happy-dom';
 import { OrbitView, bindOrbitControls } from '../../src/games/hive/features/orbit-view.js';
 import { Game } from '../../src/games/hive/simulation.js';
+import { WORLD } from '../../src/games/hive/world.js';
 
 test('orbit rotation changes camera-relative movement and zoom stays in useful bounds', () => {
   const orbit = new OrbitView(), camera = new THREE.PerspectiveCamera(), target = new THREE.Vector3(1, 0, 2);
@@ -25,7 +26,10 @@ test('left drag rotates, right drag does not, and inactive controls release whee
   active = false; const stopped = orbit.radius, wheel = new window.WheelEvent('wheel', { deltaY: -100, cancelable: true }); canvas.dispatchEvent(wheel);
   assert.equal(orbit.radius, stopped); assert.equal(wheel.defaultPrevented, false); window.happyDOM.abort();
 });
-test('Honey Retrieval ignores ascent/descent input and keeps honey collection height', () => {
+test('Honey Retrieval climbs and sinks between the garden floor and ceiling', () => {
   const game = new Game({ bots: 0 }), bee = game.addPlayer();
-  for (const y of [1, -1]) for (let i = 0; i < 10; i++) { game.setInput(bee.id, { y, x: 0.1 }); game.tick(0.05); assert.equal(bee.y, 2); }
+  for (let i = 0; i < 60; i++) { game.setInput(bee.id, { y: 1 }); game.tick(0.05); }
+  assert.equal(bee.y, WORLD.ceiling);
+  for (let i = 0; i < 80; i++) { game.setInput(bee.id, { y: -1 }); game.tick(0.05); }
+  assert.equal(bee.y, WORLD.floor);
 });

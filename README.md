@@ -1,6 +1,6 @@
 # The Hive
 
-Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a floating hexagonal garden with natural grass, earth, and stone, colorful flowers, and honey-colored AI scouts, collect nectar from flowers, and return it to the golden hive. Six AI scouts contribute to a shared goal of 300 nectar in three minutes. Rounds restart automatically.
+Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 300 nectar in three minutes. Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
 
 ## Run locally
 
@@ -17,7 +17,7 @@ The interface uses a minimal dark terminal theme: gameplay fills the page, the o
 
 ## Settings
 
-The centered navigation switches games. The top-right global **⚙** controls fullscreen, dark/light appearance, accent colors, and compact UI. The default is black and yellow; preferences last for the current page session.
+The centered navigation switches games. The top-right global **⚙** controls fullscreen, dark/light appearance, accent colors, and compact UI. Fullscreen shows only the game area (canvas and HUD) edge to edge; **Esc** leaves it. Honey Retrieval also has a **⛶** button and the **F** key. The default is black and yellow; preferences last for the current page session.
 
 Worker Bee Sim has its own **⚙** inside the office HUD for first-person FoV (55–105°) and walking view bobbing (0–300%; default 100%; 0 disables camera and item motion). Reduced-motion devices default to no bobbing. Its sound volume slider controls cartoon effects and office ambience (default 55%; 0 mutes). The HUD **♫** button mutes/unmutes quickly.
 
@@ -92,20 +92,35 @@ Publishing is performed by Cloudflare's connected build after you push a commit.
 
 | Control | Action |
 | --- | --- |
-| WASD or arrow keys | Fly relative to the camera |
-| Left click + drag | Rotate the garden view |
-| Scroll wheel | Zoom in / out |
-| Shift | Half-second boost, four-second cooldown |
+| WASD or arrow keys | Fly relative to the camera (garden view) |
+| Space / E, C / Q | Climb / sink (between the grass and the treetops) |
+| Shift | 2.5-second boost; recharges in 3.5 seconds, faster with every nectar you collect |
+| V or 👁 button | Toggle **bee view** (first person) |
+| Left click + drag | Rotate the garden view; in bee view, look around |
+| Scroll wheel | Zoom in / out (garden view) |
+| F or ⛶ button | Fullscreen game area |
 | P or pause button | Pause / resume |
 
-Touch devices show directional and boost buttons; drag the garden to rotate the view. Nectar collects automatically when you fly close to a flower at its height. Your bag holds eight drops. Fly into the center hive's glowing ring to deliver. Bees fly at a fixed height; Space and Ctrl do not change altitude. Scouts are AI, visibly labeled throughout the interface. Audio is synthesized locally and off by default. Leaving the window pauses active play.
+**Bee view** puts the camera on your bee's head, with its antennae and wing tips at the edge of the view. Click the garden to steer with the mouse (pointer lock; **Esc** releases it) or drag to look. **W** flies where you look, so looking down and pressing W dives; **A/D** strafe, **←/→** turn, Space/C still climb and sink. Boost widens the view.
+
+Touch devices show directional, climb/sink, and boost buttons; drag the garden to rotate the view (or to look in bee view). Nectar collects automatically when you fly close to a honey drop; drops grow on low meadow flowers, mid-height flowers, and tall sunflowers, so altitude matters. Your bag holds eight drops. Fly into the center hive's glowing ring to deliver. Scouts are AI, visibly labeled throughout the interface. Leaving the window pauses active play.
+
+### Bumps, bubbles, and the bumblebee
+
+Bees, trees, flowers, and the hive are solid. Flying into another bee bumps both apart; flying into an object bonks you back. Each bump shows a comic sound word (*BOINK!*, *THUD!*) and the bees complain in comic speech bubbles with gibberish voices: the bumped scout complains (“Too much honey for breakfast?”), the other may talk back. Your own bee stays quiet. Scouts mostly yield to each other but daydream now and then, and nobody yields at the busy hive entrance.
+
+Around the middle of each round (half the time or half the goal, whichever comes first, slightly randomized) a big, fuzzy bumblebee arrives. A red alert (**“ALERT – BUMBLEBEE INCOMING”**) with a soft alarm and a countdown announces it four seconds ahead, and an edge marker points to where it will enter. It wobbles across the garden for about 20 seconds, lurches toward bees (often you), and knocks the bees it hits flying: they tumble with dizzy stars for a moment, spill up to two nectar, and every bee nearby shouts at it. After a few seconds they calm down and fly on. Use altitude and boost to dodge it.
+
+### Sound
+
+Sound starts with **▶** and can be muted with the **♪** button. Every bee has its own positioned buzz: the listener is your bee, so other bees get louder as they come closer and pan left/right with your view. Scouts zipping past make a quick *bsss* fly-by. Bumps, bonks, nectar pickups, deliveries, boosts, the bumblebee's deep drone and crash, its warning, and the bees' gibberish complaints are all positioned in the garden, over a quiet meadow ambience. Audio pauses with the game, in hidden tabs, and when switching games. Sources and rights: [public/games/hive/audio/README.md](public/games/hive/audio/README.md).
 
 ## Privacy and scope
 
 - All game state lives in memory in the browser. Refreshing clears it.
 - No accounts, custom names, chat, persistent player identifiers, cookies, browser storage, telemetry, analytics, or external game connections.
 - The player's alias is generated (`Bee 007`). No personal information is requested.
-- Art, fonts, and audio are local or procedural. No remote assets or runtime CDN requests.
+- Art and fonts are procedural or local. Honey Retrieval's sound effects are small AI-generated MP3 files stored in this repository and served locally. No remote assets or runtime CDN requests.
 - This repository contains no CreatorHive user data or integration with its accounts, platform, or livestream service.
 - A local development/preview server necessarily handles browser connections. The game does not record connection addresses or add access logging.
 - The production build can be hosted as static files. Multiplayer and livestream integrations are internally planned only.

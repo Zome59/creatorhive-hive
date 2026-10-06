@@ -1,7 +1,8 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export class OrbitView {
-  constructor() { this.azimuth = Math.atan2(28, 35); this.elevation = Math.atan2(32, Math.hypot(28, 35)); this.radius = Math.hypot(28, 32, 35); }
+  // Starts closer than the full island so bees stay readable; the view follows the player.
+  constructor() { this.azimuth = Math.atan2(28, 35); this.elevation = Math.atan2(32, Math.hypot(28, 35)); this.radius = 42; }
   rotate(dx, dy) {
     this.azimuth = (this.azimuth - dx * 0.006) % (Math.PI * 2);
     this.elevation = clamp(this.elevation + dy * 0.005, 0.28, 1.25);

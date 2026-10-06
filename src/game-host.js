@@ -1,5 +1,5 @@
 // The shell owns navigation; modules own their scenes, state, input, and UI.
-export function createGameHost({ games, renderer, container, controls, navigation, arena, notify, openDialog, closeDialog, clearNotification = () => {} }) {
+export function createGameHost({ games, renderer, container, controls, navigation, arena, notify, openDialog, closeDialog, clearNotification = () => {}, toggleFullscreen = async () => {} }) {
   const entries = new Map(), instances = new Map(), buttons = new Map();
   let activeId = null, width = 1, height = 1;
   for (const entry of games) {
@@ -14,7 +14,7 @@ export function createGameHost({ games, renderer, container, controls, navigatio
     const entry = entries.get(id); if (!entry) throw new Error(`Unknown game: ${id}`);
     // Construct before switching so a failed new module leaves the current game usable.
     if (!instances.has(id)) {
-      const instance = entry.create({ renderer, container, notify, openDialog, closeDialog });
+      const instance = entry.create({ renderer, container, notify, openDialog, closeDialog, toggleFullscreen });
       for (const method of ['activate', 'deactivate', 'update', 'resize', 'pause']) {
         if (typeof instance?.[method] !== 'function') throw new Error(`${id}: missing ${method} lifecycle method`);
       }
