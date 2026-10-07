@@ -14,11 +14,14 @@ test('orbit rotation changes camera-relative movement and zoom stays in useful b
   for (let i = 0; i < 30; i++) orbit.zoom(800); assert.equal(orbit.radius, 80);
   orbit.rotate(0, 9999); assert.equal(orbit.elevation, 1.25); orbit.rotate(0, -9999); assert.equal(orbit.elevation, 0.28);
 });
-test('left drag rotates, right drag does not, and inactive controls release wheel scrolling', () => {
+test('left drag rotates, right or Option drag pans, and inactive controls release wheel scrolling', () => {
   const window = new Window(), canvas = window.document.createElement('canvas'), orbit = new OrbitView(); let active = true;
   const controls = bindOrbitControls(canvas, orbit, () => active);
   const pointer = (type, x, button = 0) => canvas.dispatchEvent(new window.PointerEvent(type, { pointerId: 1, clientX: x, clientY: 10, button, cancelable: true }));
   const initial = orbit.azimuth; pointer('pointerdown', 10, 2); pointer('pointermove', 50, 2); assert.equal(orbit.azimuth, initial);
+  assert.ok(Math.hypot(orbit.panX, orbit.panZ) > 1, 'a right drag pans'); assert.equal(orbit.panning, true); controls.cancel(); assert.equal(orbit.panning, false);
+  for (let i = 0; i < 120; i++) orbit.settle(1 / 60); assert.ok(Math.hypot(orbit.panX, orbit.panZ) < 0.05, 'and eases back to the bee');
+  for (let i = 0; i < 50; i++) orbit.pan(300, 300); assert.ok(Math.hypot(orbit.panX, orbit.panZ) <= 18 + 1e-9, 'never far off'); orbit.panX = orbit.panZ = 0;
   pointer('pointerdown', 10); pointer('pointermove', 50); assert.notEqual(orbit.azimuth, initial); controls.cancel();
   const rotated = orbit.azimuth; pointer('pointermove', 70); assert.equal(orbit.azimuth, rotated);
   const radius = orbit.radius, zoom = new window.WheelEvent('wheel', { deltaY: -100, cancelable: true }); canvas.dispatchEvent(zoom);

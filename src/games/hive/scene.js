@@ -54,9 +54,16 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     $('intro').hidden = true; $('flight-hud').hidden = false; $('pause').disabled = false; $('view').disabled = false; $('phase').textContent = 'ACTIVE';
     if (!audio.enabled) audio.setMix(INTRO_MIX, 0); $('sound-hint').hidden = true;
     audio.setEnabled(soundOn); audio.setMix(1, 1.5); soundscape.reset(); // fade up from the quiet intro (about 4 s)
-    toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.'); $('intro-best').hidden = true;
-    spotlight = SPOTLIGHT; bubbles.say(player.id, 'That\u2019s you!', { delay: 0.6 });
+    $('intro-best').hidden = true;
+    orbit.panX = orbit.panZ = 0; orbitTarget.set(player.x, player.y, player.z);
+    if (reducedMotion || view === 'bee') { spotlight = SPOTLIGHT; bubbles.say(player.id, 'That\u2019s you!', { delay: 0.6 }); startTip(); }
+    else { flyover = 0; saidHi = false; orbit.azimuth = FLY.to; game.cutscene = FLY.circle + FLY.swoop + FLY.hold; root.classList.add('flyover'); }
   };
+  // On the landing screen a click anywhere in the garden starts the round, not only the ▶ button.
+  let pressAt = null;
+  renderer.domElement.addEventListener('pointerdown', event => { pressAt = { x: event.clientX, y: event.clientY }; if (flyover >= 0 && flyover < FLY.circle + FLY.swoop) skipFlyover(); });
+  renderer.domElement.addEventListener('click', event => { if (active && !started && !modal.open && (!pressAt || Math.hypot(event.clientX - pressAt.x, event.clientY - pressAt.y) < 8)) $('start').click(); });
+  root.addEventListener('click', event => { if (active && !started && !modal.open && !event.target.closest?.('button, a, input, select, label, summary, details, #controls-panel')) $('start').click(); });
   let autoPaused = false; // paused only because the window lost focus: coming back resumes on its own
   function togglePause() {
     if (!started) return;
@@ -93,6 +100,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       row('⚡ Power boost', `<small>when glowing</small>${k('ShiftLeft', 'SHIFT')}`),
       row('🐝 Shove bumblebee', '<small>power boost · 2 🍯</small>'),
       bee ? row('Look', '<small>click + mouse, or drag</small>') : row('Rotate / zoom', '<small>drag · scroll</small>'),
+      bee ? '' : row('Pan', '<small>⌥ + drag · right-drag</small>'),
       row(bee ? 'Garden view' : 'Bee view', k('KeyV', 'V')),
       row('Fullscreen', k('KeyF', 'F')),
       row('Pause', k('KeyP', 'P')),
@@ -178,6 +186,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (e.code === 'KeyH' && !e.repeat) { setPanel(!panelOpen); return; }
     if (e.code === 'Enter' && !started && !e.repeat && e.target === document.body) { $('start').click(); return; }
     if (cinematic.active && ['Enter', 'Escape', 'Space'].includes(e.code)) { e.preventDefault(); endCinematic(); return; }
+    // During the start flight Enter/Esc jump to the close-up; a flight key ends it and you fly at once.
+    if (flyover >= 0 && flyover < FLY.circle + FLY.swoop && ['Enter', 'Escape'].includes(e.code) && !e.repeat) { e.preventDefault(); skipFlyover(); return; }
+    if (flyover >= 0 && flyover < FLY.circle + FLY.swoop + FLY.hold && FLIGHT_KEYS.has(e.code)) { flyover = FLY.circle + FLY.swoop + FLY.hold; game.cutscene = 0; }
     if (!started) return;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyP' && !e.repeat) togglePause();
@@ -543,6 +554,32 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   }
   // Start of play: zoom in on the player's bee and make it glow for a moment, then ease back out.
   const SPOTLIGHT = 3.5, spotEye = new THREE.Vector3(), spotAim = new THREE.Vector3();
+  // Start of play: a slow flight around the island from outside (the brook and waterfall in view), then the
+  // camera swoops down to the player's bee, holds a moment, and eases into the garden view. Skippable.
+  const FLY = Object.freeze({ circle: 4.2, swoop: 1.6, hold: 0.9, out: 1.3, from: 2.4, to: 1.05, radius: 72, elevation: 0.3 });
+  const flyEye = new THREE.Vector3(), flyAim = new THREE.Vector3(), closeEye = new THREE.Vector3(), orbitEye = new THREE.Vector3();
+  let flyover = -1, saidHi = false;
+  const FLIGHT_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyC', 'ShiftLeft', 'ShiftRight', 'KeyE']);
+  function circlePose(t) {
+    const az = FLY.from + (FLY.to - FLY.from) * Math.min(1, t / (FLY.circle + FLY.swoop)), r = FLY.radius - 8 * Math.min(1, t / FLY.circle), flat = Math.cos(FLY.elevation) * r;
+    flyAim.set(0, -2.5, 0); flyEye.set(Math.sin(az) * flat, Math.sin(FLY.elevation) * r, Math.cos(az) * flat);
+  }
+  const startTip = () => toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.');
+  function skipFlyover() { flyover = FLY.circle + FLY.swoop; game.cutscene = Math.min(game.cutscene, FLY.hold); }
+  function flyoverCamera(dt, own) {
+    flyover += paused ? 0 : dt;
+    const t = flyover, swoopEnd = FLY.circle + FLY.swoop, holdEnd = swoopEnd + FLY.hold, outEnd = holdEnd + FLY.out, bee = own.group.position;
+    orbitEye.copy(camera.position); closeEye.copy(camera.position).sub(orbitTarget).setLength(9).add(bee); // the garden view's direction, 9 m from the bee
+    spotlight = t >= FLY.circle && t < outEnd ? 1 : 0;
+    if (!saidHi && t >= FLY.circle + FLY.swoop * 0.6) { saidHi = true; bubbles.say(player.id, 'That\u2019s you!'); }
+    // The HUD returns as you take over.
+    if (t >= holdEnd && root.classList.contains('flyover')) { root.classList.remove('flyover'); startTip(); }
+    if (t < FLY.circle) { circlePose(t); camera.position.copy(flyEye); camera.lookAt(flyAim); }
+    else if (t < swoopEnd) { const k = ease((t - FLY.circle) / FLY.swoop); circlePose(t); camera.position.lerpVectors(flyEye, closeEye, k); camera.lookAt(probe.lerpVectors(flyAim, bee, k)); }
+    else if (t < holdEnd) { camera.position.copy(closeEye); camera.lookAt(bee); }
+    else if (t < outEnd) { const k = ease((t - holdEnd) / FLY.out); camera.position.lerpVectors(closeEye, orbitEye, k); camera.lookAt(probe.lerpVectors(bee, orbitTarget, k)); }
+    else { flyover = -1; spotlight = 0; }
+  }
   // A neglected flower droops and sinks away, then a new one sprouts with a little overshoot.
   function wiltPose(g, w) {
     if (!w) { if (g.userData.wilted) { g.scale.setScalar(1); g.rotation.z = 0; g.visible = true; g.userData.wilted = false; } return; }
@@ -632,8 +669,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       beeView.apply(camera, own.group.position, dt, elapsed, { strafe, boosting: game.boosting(player) || player.turbo > 0, stunned: player.stun > 0 });
       viewModel.update(elapsed, { boosting: game.boosting(player) || player.turbo > 0 });
     } else {
-      // The garden view follows the player more on the larger island but keeps the hive in frame.
-      orbitTarget.lerp(probe.set(player ? player.x * 0.55 : 0, player ? Math.max(0, player.y - 2) * 0.5 : 0, player ? player.z * 0.55 : 0), 1 - Math.exp(-dt * 3));
+      // The garden view keeps your bee in the centre (plus a pan offset while you drag, which eases back).
+      if (!orbit.panning) orbit.settle(paused ? 0 : dt);
+      orbitTarget.lerp(probe.set(player ? player.x + orbit.panX : 0, player ? player.y : 0, player ? player.z + orbit.panZ : 0), 1 - Math.exp(-dt * 8));
       orbit.apply(camera, orbitTarget);
       if (game.celebration) {
         // Frame the party: the swollen hive, the honey flood, and the honeycomb of bees above it.
@@ -641,7 +679,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
         spotEye.copy(camera.position).sub(orbitTarget).setLength(22).add(spotAim);
         camera.position.lerp(spotEye, k); camera.lookAt(probe.copy(orbitTarget).lerp(spotAim, k));
         if (camera.fov !== ORBIT_FOV) { camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); }
-      } else if (spotlight > 0 && own) {
+      } else if (flyover >= 0 && own) flyoverCamera(dt, own);
+      else if (spotlight > 0 && own) {
         // Ease in over the first second, hold, ease out over the last 1.2 s.
         spotlight = Math.max(0, spotlight - (paused ? 0 : dt));
         const since = SPOTLIGHT - spotlight, k = Math.min(1, since / 1, spotlight / 1.2), ease = k * k * (3 - 2 * k);
@@ -765,7 +804,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   renderer.domElement.addEventListener('pointerdown', () => { if (cinematic.active) endCinematic(); }, true);
   function endTour() {
     $('tour-caption').hidden = true; $('tour-cover').style.opacity = '0'; $('start').classList.remove('pulse');
-    root.classList.remove('bee-view'); camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); orbitTarget.set(0, 0, 0);
+    root.classList.remove('bee-view'); camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); orbitTarget.set(0, 0, 0); flyover = -1; root.classList.remove('flyover');
   }
 
   renderControls(); setPanel(panelOpen);

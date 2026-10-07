@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**. Click **▶** (or press **Enter**) to begin. The landing screen plays a short guided tour of the live garden: camera shots, including a moment in bee view, with captions explaining how to play. It ends on **“Let’s go!”** with a pulsing play button and then loops. The garden is audible quietly from your first click or key press (browsers need a gesture before playing sound) and fades up to full volume when the round starts. **ⓘ Full guide** in the caption, or **?** in the HUD during play (which pauses), opens the complete game guide.
+Open **http://127.0.0.1:5173**. Click **▶**, anywhere in the garden, or press **Enter** to begin. The landing screen plays a short guided tour of the live garden: camera shots, including a moment in bee view, with captions explaining how to play. It ends on **“Let’s go!”** with a pulsing play button and then loops. The garden is audible quietly from your first click or key press (browsers need a gesture before playing sound) and fades up to full volume when the round starts. **ⓘ Full guide** in the caption, or **?** in the HUD during play (which pauses), opens the complete game guide.
 
 The interface uses a minimal dark terminal theme: gameplay fills the page, the objective and timer sit inside the game, and a compact controls strip stays beneath it. Use the **Honey Retrieval** and **Worker Bee Sim** buttons to switch games; the inactive mode stops updating and its UI is removed from the page until you return.
 
@@ -99,6 +99,7 @@ Publishing is performed by Cloudflare's connected build after you push a commit.
 | V or 👁 button | Toggle **bee view** (first person) |
 | Left click + drag | Rotate the garden view; in bee view, look around |
 | Scroll wheel | Zoom in / out (garden view) |
+| ⌥ Option / Alt + drag, or right-drag | Pan the garden view; it glides back to your bee when you let go |
 | F or ⛶ button | Fullscreen game area |
 | P or pause button | Pause / resume |
 
@@ -107,6 +108,10 @@ A large **controls panel**, by default hanging half over the left edge of the ga
 **Bee view** puts the camera on your bee's head, with its antennae and wing tips at the edge of the view. Click the garden to steer with the mouse (pointer lock; **Esc** releases it) or drag to look. **W** flies where you look, so looking down and pressing W dives; **A/D** strafe, **←/→** turn (gently: the turn eases in, so a short tap turns only a little), Space/C still climb and sink. Boost and speed mode widen the view.
 
 Touch devices show directional, climb/sink, boost, and speed buttons; drag the garden to rotate the view (or to look in bee view). Nectar collects automatically when you fly close to a honey drop; drops grow on low meadow flowers, mid-height flowers, and tall sunflowers, so altitude matters. Your bag holds eight drops. Fly into the center hive's glowing ring to deliver. Scouts are AI, visibly labeled throughout the interface. They fly at slightly different paces (±12 %), and now and then one gets a short burst of zeal (“Wheee!”) or a lazy spell (“Yawn…”). Leaving the window pauses active play; clicking back into it resumes on its own.
+
+### Start flight
+
+Each round opens with a short flight: the camera circles the floating island from outside (the brook pours over the rim as a waterfall), swoops down to your bee (“That's you!”), and eases into the garden view, which keeps your bee in the centre from then on. The round clock waits meanwhile. Enter or Esc jumps to your bee; any flight key ends the flight and you fly at once. With reduced motion, a short zoom replaces the flight.
 
 ### Brook, waterfall, stones, and bushes
 

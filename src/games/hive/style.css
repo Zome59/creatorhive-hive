@@ -298,3 +298,7 @@
 .garden-ui .rain-overlay { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(105deg, transparent 0 18px, #cfe9ff22 18px 19px); background-size: 200% 200%; animation: garden-rain .5s linear infinite; }
 @keyframes garden-rain { to { background-position: -40px 120px; } }
 @media (prefers-reduced-motion: reduce) { .garden-ui .rain-overlay { animation: none; } }
+
+/* Start flight around the island: the flight HUD waits until the camera reaches your bee. */
+.garden-ui .flight-hud { transition: opacity .5s; }
+.garden-ui.flyover .flight-hud { opacity: 0; pointer-events: none; }
