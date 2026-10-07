@@ -2,17 +2,31 @@ import { WORLD, FLOWERS, OBSTACLES, contact } from './world.js';
 import { BUMBLE, HEIST, SHOVE, heistActive, scheduleBumblebee, tickBumblebee } from './features/bumblebee.js';
 
 export { FLOWERS };
-export const RULES = Object.freeze({ radius: WORLD.radius, capacity: 8, duration: 180, break: 18, goal: 360, regrow: 1.2 });
+export const RULES = Object.freeze({ radius: WORLD.radius, capacity: 8, duration: 180, break: 18, goal: 350, regrow: 1.2 });
 // Goal celebration: a joyful loop around the hive, then a honeycomb formation (centre + hexagon rings) above it.
 export const CELEBRATION = Object.freeze({ loop: 3.5, loopRadius: 6, height: 8.2, cell: 2.6 });
 // Shift starts a long boost; nectar pickups shorten the recharge.
 export const BOOST = Object.freeze({ duration: 2.5, cooldown: 6, speed: 12.5, refill: 1.2 });
+// Speed mode (player only): double-tap the flight direction or press E. Faster flight for a while, then a long recharge.
+export const TURBO = Object.freeze({ duration: 5, cooldown: 20, factor: 1.45 });
+// Scouts differ a little in pace (±12 %); in rare 6-second spells one gets a burst of zeal or turns lazy.
+export const PACE = Object.freeze({ spread: 0.12, window: 6, rare: 0.07, fast: 1.3, slow: 0.72 });
+const fract = x => x - Math.floor(x);
+export function scoutPace(id, clock) {
+  const base = 1 + (fract(id * 0.618034) - 0.5) * 2 * PACE.spread;
+  const h = fract(Math.sin(id * 12.9898 + Math.floor(clock / PACE.window) * 78.233) * 43758.5453);
+  const mood = h < PACE.rare ? 'fast' : h > 1 - PACE.rare ? 'slow' : null;
+  return { pace: base * (mood === 'fast' ? PACE.fast : mood === 'slow' ? PACE.slow : 1), mood };
+}
 // Nectar power: enough collected nectar charges the player's next boost into a power boost that
 // sends bees flying and knocks trees and flowers over until they stand up again.
 export const POWER = Object.freeze({ need: 6, shove: 3.4, topple: 2.6, rise: 0.7 });
 // From half a bag on, nectar weighs the bee down: slightly at first, then more and more (about
 // 6 % slower at 4/8 up to 27 % when full). Delivered nectar scores points; bigger loads earn a
 // multiplier. The best round of the page session is kept.
+// Too many bumps in a short time (adjustable in the settings) bring a rain cloud: the wet bee flies
+// slower for a few seconds, then shakes itself dry.
+export const RAIN = Object.freeze({ bumps: 5, window: 20, wet: 5, slow: 0.6, shake: 0.9 });
 export const LOAD = Object.freeze({ heavy: 4, start: 0.05, slow: 0.22, points: 10, bonus: Object.freeze([[8, 2], [6, 1.5]]) });
 export const loadFactor = bag => { if (bag < LOAD.heavy) return 1; const t = (bag - LOAD.heavy + 1) / (RULES.capacity - LOAD.heavy + 1); return 1 - LOAD.start - LOAD.slow * t * t; };
 export const deliveryPoints = amount => { const bonus = LOAD.bonus.find(([size]) => amount >= size)?.[1] ?? 1; return { points: Math.round(amount * LOAD.points * bonus), bonus }; };
@@ -38,7 +52,8 @@ export class Game {
     this.toppled = new Map();
     this.best = 0; this.scores = [];
     // While a cutscene plays, the round clock stops and the player's bee waits safely.
-    this.cutscene = 0;
+    this.cutscene = 0; this.clock = 0;
+    this.rainRule = { bumps: RAIN.bumps, window: RAIN.window };
     scheduleBumblebee(this, RULES.goal);
     for (let i = 0; i < bots; i++) this.addPlayer(true);
   }
@@ -50,18 +65,25 @@ export class Game {
     const id = ++this.sequence;
     const p = { id, name: `${bot ? 'Scout' : 'Bee'} ${String(id).padStart(3, '0')}`, bot, ...home(id),
       yaw: 0, bag: 0, score: 0, points: 0, boost: 0, input: { x: 0, y: 0, z: 0, dash: false }, idle: 0, collect: 0, target: id % FLOWERS.length,
-      vx: 0, vy: 0, vz: 0, kx: 0, ky: 0, kz: 0, power: 0, powered: false, stun: 0, angry: 0, fume: 0, bonk: 0, poke: 0, recoil: 0, distracted: 0, focus: 2 + this.random() * 6, dodge: 0 };
+      vx: 0, vy: 0, vz: 0, kx: 0, ky: 0, kz: 0, power: 0, powered: false, wet: 0, shake: 0, bumpLog: [], turbo: 0, turboWait: 0, pace: 1, mood: null, stun: 0, angry: 0, fume: 0, bonk: 0, poke: 0, recoil: 0, distracted: 0, focus: 2 + this.random() * 6, dodge: 0 };
     this.players.set(id, p);
     return p;
   }
   setInput(id, input) {
     const p = this.players.get(id);
     if (!p || !input || typeof input !== 'object') return;
-    p.input = { x: clamp(finite(input.x), -1, 1), y: clamp(finite(input.y), -1, 1), z: clamp(finite(input.z), -1, 1), dash: input.dash === true,
+    p.input = { x: clamp(finite(input.x), -1, 1), y: clamp(finite(input.y), -1, 1), z: clamp(finite(input.z), -1, 1), dash: input.dash === true, turbo: input.turbo === true,
       face: Number.isFinite(input.face) ? input.face : undefined };
     p.idle = 0;
   }
   boosting(p) { return p.boost > BOOST.cooldown - BOOST.duration; }
+  // Counts the player's bumps; enough of them within the window bring the rain cloud.
+  noteBump(p) {
+    if (p.bot || p.wet || this.cutscene) return;
+    const { bumps, window } = this.rainRule;
+    p.bumpLog = p.bumpLog.filter(t => this.clock - t < window); p.bumpLog.push(this.clock);
+    if (p.bumpLog.length >= bumps) { p.bumpLog = []; p.wet = RAIN.wet; this.emit({ type: 'rain-start', id: p.id, x: p.x, y: p.y, z: p.z }); }
+  }
   powerBoosting(p) { return p.powered && this.boosting(p); }
   // A toppled tree or flower has no collision until it has stood up again.
   standing(o) { return !this.toppled.has(o.owner); }
@@ -83,6 +105,7 @@ export class Game {
       else this.reset();
     }
     if (this.result) { if (this.celebration) this.celebrate(dt); return; }
+    this.clock += dt;
     this.cooldowns = this.cooldowns.map(c => Math.max(0, c - dt));
     for (const [key, value] of this.pairs) if (value <= dt) this.pairs.delete(key); else this.pairs.set(key, value - dt);
     for (const [owner, state] of this.toppled) { state.time -= dt; if (state.time <= 0) { this.toppled.delete(owner); this.emit({ type: 'restore', owner, kind: state.kind, x: state.x, y: 1.2, z: state.z }); } }
@@ -94,17 +117,26 @@ export class Game {
   }
   move(p, dt) {
     p.idle += dt;
-    for (const key of ['collect', 'stun', 'angry', 'fume', 'bonk', 'poke', 'recoil', 'distracted', 'dodge']) p[key] = Math.max(0, p[key] - dt);
+    for (const key of ['collect', 'stun', 'angry', 'fume', 'bonk', 'poke', 'recoil', 'distracted', 'dodge', 'shake']) p[key] = Math.max(0, p[key] - dt);
     const wasBoosting = this.boosting(p);
     p.boost = Math.max(0, p.boost - dt);
     if (p.bot) this.steer(p, dt);
     let input = (p.idle > 0.5 || this.cutscene) && !p.bot ? { x: 0, y: 0, z: 0, dash: false } : p.input;
-    if (p.stun) input = { ...input, x: input.x * (p.bot ? 0 : 0.3), y: input.y * (p.bot ? 0 : 0.3), z: input.z * (p.bot ? 0 : 0.3), dash: false };
+    if (p.stun) input = { ...input, x: input.x * (p.bot ? 0 : 0.3), y: input.y * (p.bot ? 0 : 0.3), z: input.z * (p.bot ? 0 : 0.3), dash: false, turbo: false };
     // Bouncing off something heavy: steering barely works for a moment.
     else if (p.recoil) input = { ...input, x: input.x * 0.15, y: input.y * 0.15, z: input.z * 0.15 };
     if (input.dash && p.boost === 0) { p.boost = BOOST.cooldown; this.emit({ type: 'boost', id: p.id, power: p.powered }); }
+    p.turboWait = Math.max(0, p.turboWait - dt);
+    if (p.turbo) { p.turbo = Math.max(0, p.turbo - dt); if (!p.turbo) this.emit({ type: 'turbo-end', id: p.id }); }
+    if (input.turbo && !p.bot && !p.turboWait) { p.turbo = TURBO.duration; p.turboWait = TURBO.duration + TURBO.cooldown; this.emit({ type: 'turbo', id: p.id }); }
     const length = Math.max(1, Math.hypot(input.x, input.z));
-    const speed = (this.boosting(p) ? BOOST.speed : SPEED) * (p.bot ? BOT_SPEED : 1) * loadFactor(p.bag);
+    if (p.wet) { p.wet = Math.max(0, p.wet - dt); if (!p.wet) { p.shake = RAIN.shake; this.emit({ type: 'rain-end', id: p.id }); } }
+    if (p.bot) {
+      const { pace, mood } = scoutPace(p.id, this.clock);
+      p.pace += (pace - p.pace) * Math.min(1, dt * 2); // eases into a new pace instead of jumping
+      if (mood !== p.mood) { p.mood = mood; if (mood) this.emit({ type: 'scout-mood', id: p.id, mood }); }
+    }
+    const speed = (this.boosting(p) ? BOOST.speed : SPEED * (p.turbo ? TURBO.factor : 1)) * (p.bot ? BOT_SPEED * p.pace : 1) * loadFactor(p.bag) * (p.wet ? RAIN.slow : 1);
     if (wasBoosting && !this.boosting(p)) { this.emit({ type: 'boost-end', id: p.id, power: p.powered }); if (p.powered) { p.powered = false; p.power = 0; } }
     p.vx = input.x / length * speed + p.kx; p.vz = input.z / length * speed + p.kz;
     p.vy = clamp(input.y, -1, 1) * CLIMB * (this.boosting(p) ? 1.3 : 1) + p.ky;
@@ -135,6 +167,7 @@ export class Game {
         p.kx += c.nx * bounce; p.ky += c.ny * bounce; p.kz += c.nz * bounce;
         if (impact > 1.6 && !p.bonk) {
           p.bonk = 0.7;
+          this.noteBump(p);
           this.emit({ type: 'thud', id: p.id, kind: o.kind, impact, x: p.x - c.nx * WORLD.beeRadius, y: p.y - c.ny * WORLD.beeRadius, z: p.z - c.nz * WORLD.beeRadius });
         }
       }
@@ -160,6 +193,7 @@ export class Game {
       if (impact > 0.9 && !this.pairs.has(key)) {
         this.pairs.set(key, 1.6);
         const by = towardB >= towardA ? a : b, victim = by === a ? b : a;
+        this.noteBump(a); this.noteBump(b);
         this.emit({ type: 'bump', by: by.id, victim: victim.id, impact, power: !!power, x: a.x + dx / 2, y: a.y + dy / 2, z: a.z + dz / 2 });
       }
       this.confine(a); this.confine(b);
@@ -294,7 +328,7 @@ export class Game {
     this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.celebration = null; this.cooldowns.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
     scheduleBumblebee(this, RULES.goal);
     for (const p of this.players.values()) {
-      Object.assign(p, home(p.id), { score: 0, points: 0, bag: 0, boost: 0, power: 0, powered: false, kx: 0, ky: 0, kz: 0, vx: 0, vy: 0, vz: 0, stun: 0, angry: 0, fume: 0 });
+      Object.assign(p, home(p.id), { score: 0, points: 0, bag: 0, boost: 0, power: 0, powered: false, wet: 0, shake: 0, bumpLog: [], turbo: 0, turboWait: 0, kx: 0, ky: 0, kz: 0, vx: 0, vy: 0, vz: 0, stun: 0, angry: 0, fume: 0 });
     }
   }
 }

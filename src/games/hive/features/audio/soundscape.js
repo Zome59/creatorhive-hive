@@ -8,12 +8,14 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
   const VOICE_GAP = 1.8, CHATTY = 0.6;
   const at = bee => ({ x: bee.x, y: bee.y, z: bee.z });
   return {
-    frame(game, player, dt, { listener, beeView = false, music = 'off' } = {}) {
+    frame(game, player, dt, { listener, beeView = false, music = 'off', water = [] } = {}) {
       clock += dt;
       if (!audio.enabled) return;
       if (listener) audio.listen(listener);
       const keys = new Set(['garden']);
       audio.loop('garden', 'garden', { spatial: false });
+      // The brook and the waterfall: positioned, so they swell as you fly close.
+      for (const source of water) { keys.add(source.key); audio.loop(source.key, 'brook', { x: source.x, y: source.y, z: source.z, rate: source.rate ?? 1, gain: source.gain ?? 1 }); }
       // One key per track, so switching tracks stops the previous one.
       if (music !== 'off') { keys.add(`music:${music}`); audio.loop(`music:${music}`, music, { spatial: false }); }
       for (const bee of game.players.values()) {
@@ -31,6 +33,8 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
         if (state.d >= PASS && d < PASS && relative > 3 && !state.wait) { audio.play('pass', at(bee), { rate: pitch }); state.wait = 2.5; }
         state.d = d; passes.set(bee.id, state);
       }
+      // A soaked player hears the little cloud's rain right above.
+      if (player?.wet) { keys.add('rain'); audio.loop('rain', 'rain', { spatial: false }); }
       const b = game.bumble;
       if (b) {
         keys.add('bumble');
@@ -53,6 +57,8 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
         else if (event.type === 'bump') audio.play('bump', event, { gain: Math.min(1, 0.55 + event.impact / 8) });
         else if (event.type === 'power-ready' && own) { audio.play('collect', null, { rate: 1.45 }); audio.chime(1320); }
         else if (event.type === 'bumble-shoved') { audio.play('crash', event, { rate: 0.85 }); audio.play('dizzy', event, { delay: 0.3, rate: 0.7 }); }
+        else if (event.type === 'rain-end' && own) audio.play('shake');
+        else if (event.type === 'turbo' && own) audio.play('boost', null, { rate: 1.25, gain: 0.8 });
         else if (event.type === 'restore') audio.play('bump', event, { rate: 1.5, gain: 0.35 });
         else if (event.type === 'topple') { audio.play('crash', event, { rate: 0.85 }); audio.play('thud', event, { rate: 0.6, delay: 0.25 }); }
         else if (event.type === 'thud') audio.play('thud', event, { gain: Math.min(1, 0.45 + event.impact / 10) });

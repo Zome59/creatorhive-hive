@@ -22,6 +22,7 @@
 .garden-ui .boost { width: 100px; }
 .garden-ui .boost > div { height: 3px; overflow: hidden; background: #424860; }
 .garden-ui .boost i { display: block; width: 100%; height: 100%; background: var(--green); }
+.garden-ui .turbo i { background: #6fd3ff; }
 .garden-ui .flight-hud button { display: flex; align-items: center; gap: 8px; background: none; border: 0; font-size: 21px; color: var(--green); }
 .garden-ui .flight-hud button span { font-size: 9px; color: #d8d0eb; }
 .garden-ui .mobile-controls { display: none; }
@@ -292,3 +293,8 @@
 .garden-ui .flight-hud { gap: 14px; }
 
 }
+
+/* Bee view in the rain: soft streaks over the view while the cloud soaks the bee. */
+.garden-ui .rain-overlay { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(105deg, transparent 0 18px, #cfe9ff22 18px 19px); background-size: 200% 200%; animation: garden-rain .5s linear infinite; }
+@keyframes garden-rain { to { background-position: -40px 120px; } }
+@media (prefers-reduced-motion: reduce) { .garden-ui .rain-overlay { animation: none; } }

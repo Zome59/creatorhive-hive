@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { Game, RULES, BOOST, HEIST, POWER, SHOVE, LOAD, loadFactor } from './simulation.js';
+import { Game, RULES, BOOST, TURBO, HEIST, POWER, SHOVE, LOAD, RAIN, loadFactor } from './simulation.js';
+import { createRainCloud, createBoostRings } from './features/weather.js';
+import { createStream, streamDistance, STREAM, STREAM_INFO, STREAM_Y } from './features/stream.js';
 import { createPowerAura } from './features/power-aura.js';
 import { createShellFur } from './features/shell-fur.js';
 import { createHoneyGauge } from './features/honey-gauge.js';
@@ -42,7 +44,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   $('fullscreen').onclick = fullscreen;
   $('view').disabled = true;
   // The landing screen plays quietly from the first click or key press (browsers need a gesture for sound).
-  const INTRO_MIX = 0.12; // very quiet until the round starts
+  const INTRO_MIX = 0.35; // a light mix on the landing screen; the round start fades up to the full default
   function introSound() { if (active && !started && soundOn && !audio.enabled) { audio.setMix(INTRO_MIX, 0); audio.setEnabled(true); $('sound-hint').hidden = true; } }
   document.addEventListener('pointerdown', introSound, true); document.addEventListener('keydown', introSound, true);
   $('start').onclick = () => {
@@ -51,7 +53,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     game.reset(); game.round = 1; player = game.addPlayer(); started = true;
     $('intro').hidden = true; $('flight-hud').hidden = false; $('pause').disabled = false; $('view').disabled = false; $('phase').textContent = 'ACTIVE';
     if (!audio.enabled) audio.setMix(INTRO_MIX, 0); $('sound-hint').hidden = true;
-    audio.setEnabled(soundOn); audio.setMix(1, 4); soundscape.reset(); // fade up from the quiet intro
+    audio.setEnabled(soundOn); audio.setMix(1, 1.5); soundscape.reset(); // fade up from the quiet intro (about 4 s)
     toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.'); $('intro-best').hidden = true;
     spotlight = SPOTLIGHT; bubbles.say(player.id, 'That\u2019s you!', { delay: 0.6 });
   };
@@ -86,6 +88,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       row('▼ Down', k('KeyC', 'C'), ' altitude-row'),
       bee ? row('Strafe / turn', `${k('KeyA', 'A')}${k('KeyD', 'D')}${k('ArrowLeft', '←')}${k('ArrowRight', '→')}`) : '',
       row('Boost', k('ShiftLeft', 'SHIFT')),
+      row('💨 Speed mode', `<small>double-tap direction</small>${k('KeyE', 'E')}`),
       row('⚡ Power boost', `<small>when glowing</small>${k('ShiftLeft', 'SHIFT')}`),
       row('🐝 Shove bumblebee', '<small>power boost · 2 🍯</small>'),
       bee ? row('Look', '<small>click + mouse, or drag</small>') : row('Rotate / zoom', '<small>drag · scroll</small>'),
@@ -156,6 +159,12 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (preview && started && !paused) audio.play(preview, null, { bus: slider.dataset.bus === 'master' ? undefined : slider.dataset.bus });
     });
   }
+  // Game settings: how many bumps within how many seconds bring the rain cloud.
+  const rainSetting = () => {
+    game.rainRule = { bumps: Number($('rain-bumps').value), window: Number($('rain-window').value) };
+    $('rain-bumps').nextElementSibling.textContent = $('rain-bumps').value; $('rain-window').nextElementSibling.textContent = `${$('rain-window').value} s`;
+  };
+  $('rain-bumps').oninput = rainSetting; $('rain-window').oninput = rainSetting;
   $('mixer-reset').onclick = () => {
     audio.resetLevels();
     for (const slider of root.querySelectorAll('[data-bus]')) { slider.value = 100; showLevel(slider); }
@@ -173,6 +182,11 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (e.code === 'KeyP' && !e.repeat) togglePause();
     if (e.code === 'KeyV' && !e.repeat && !paused) setView(view === 'bee' ? 'orbit' : 'bee');
     keys.add(e.code); syncHeld();
+    // Double-tapping the key you fly with starts the speed mode (in bee view the turn arrows don't count).
+    if (!e.repeat && TAP_KEYS.has(e.code) && !(view === 'bee' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight'))) {
+      const now = performance.now();
+      if (lastTap.code === e.code && now - lastTap.time < 300) { turboTap = true; lastTap = { code: '', time: 0 }; } else lastTap = { code: e.code, time: now };
+    }
   });
   document.addEventListener('keyup', e => { keys.delete(e.code); syncHeld(); });
   window.addEventListener('blur', () => { release(); viewControls.cancel(); if (active && started && !paused) togglePause(); if (active && !started) audio.suspend(); });
@@ -226,7 +240,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   const grid = new THREE.GridHelper(220, 80, '#425868', '#314858'); grid.position.y = -15.98; grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
   // Grass blades are instanced to keep the scene light on the GPU.
   const grass = new THREE.InstancedMesh(new THREE.ConeGeometry(0.065, 0.55, 3), material('#ffffff'), 1700);
-  for (let i = 0; i < 1700; i++) { const a = random() * Math.PI * 2, r = 4.2 + Math.sqrt(random()) * 26; dummy.position.set(Math.cos(a) * r, 0.27, Math.sin(a) * r); dummy.rotation.set(random() * 0.2, a, random() * 0.3); dummy.scale.setScalar(0.7 + random()); dummy.updateMatrix(); grass.setMatrixAt(i, dummy.matrix); grass.setColorAt(i, new THREE.Color(palette.foliage[i % palette.foliage.length])); }
+  for (let i = 0; i < 1700; i++) { const a = random() * Math.PI * 2, r = 4.2 + Math.sqrt(random()) * 26; dummy.position.set(Math.cos(a) * r, 0.27, Math.sin(a) * r); dummy.rotation.set(random() * 0.2, a, random() * 0.3); dummy.scale.setScalar(0.7 + random()); if (streamDistance(dummy.position.x, dummy.position.z) < 0.15) dummy.scale.setScalar(0); dummy.updateMatrix(); grass.setMatrixAt(i, dummy.matrix); grass.setColorAt(i, new THREE.Color(palette.foliage[i % palette.foliage.length])); }
   scene.add(grass);
   const hive = createHiveModel(); scene.add(hive.group);
   const gauge = createHoneyGauge(); scene.add(gauge.group);
@@ -272,11 +286,38 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       orb(tree, palette.foliage[(i + 3) % palette.foliage.length], -t.canopy * 0.35, t.height + 1.3, -t.canopy * 0.3, t.canopy * 0.62));
   }
   const rockGeometry = new THREE.DodecahedronGeometry(1);
-  for (let i = 0; i < 44; i++) { const a = random() * Math.PI * 2, r = 27.5 + random() * 3.5; const rock = mesh(rockGeometry, ['#aaa79a', '#92968c', '#b5aa93'][i % 3], scene, Math.cos(a) * r, 0.15, Math.sin(a) * r); rock.scale.set(0.3 + random() * 0.45, 0.2 + random() * 0.25, 0.3 + random() * 0.45); }
+  for (let i = 0; i < 44; i++) { const a = random() * Math.PI * 2, r = 27.5 + random() * 3.5; const rock = mesh(rockGeometry, ['#aaa79a', '#92968c', '#b5aa93'][i % 3], scene, Math.cos(a) * r, 0.15, Math.sin(a) * r); rock.scale.set(0.3 + random() * 0.45, 0.2 + random() * 0.25, 0.3 + random() * 0.45); rock.visible = streamDistance(rock.position.x, rock.position.z) > 0.6; }
   const motesGeometry = new THREE.BufferGeometry(); const motePositions = new Float32Array(220 * 3);
   for (let i = 0; i < 220; i++) { motePositions[i * 3] = (random() - 0.5) * 62; motePositions[i * 3 + 1] = 1 + random() * 9; motePositions[i * 3 + 2] = (random() - 0.5) * 62; }
   motesGeometry.setAttribute('position', new THREE.BufferAttribute(motePositions, 3)); const motes = new THREE.Points(motesGeometry, new THREE.PointsMaterial({ color: '#fff2c0', size: 0.07, transparent: true, opacity: 0.8 })); scene.add(motes);
   const burst = createBurst(scene);
+  // A brook springs up in the meadow and pours over the island's rim as a waterfall; stones line it.
+  const stream = createStream(); scene.add(stream.group);
+  const brookSpot = new THREE.Vector3(), water = [{ key: 'brook', x: 0, y: STREAM_Y, z: 0 }, { key: 'waterfall', x: STREAM_INFO.lip.x, y: -1.2, z: STREAM_INFO.lip.z, rate: 0.72, gain: 1.6 }];
+  // The brook sounds from its point nearest to the listener, so the whole stream is audible along its length.
+  function nearBrook(at) {
+    let best = Infinity;
+    for (let i = 1; i < STREAM.length; i++) {
+      const a = STREAM[i - 1], b = STREAM[i], dx = b.x - a.x, dz = b.z - a.z, t = Math.max(0, Math.min(1, ((at.x - a.x) * dx + (at.z - a.z) * dz) / (dx * dx + dz * dz)));
+      const x = a.x + dx * t, z = a.z + dz * t, d = (at.x - x) ** 2 + (at.z - z) ** 2;
+      if (d < best) { best = d; brookSpot.set(x, STREAM_Y, z); }
+    }
+    Object.assign(water[0], { x: brookSpot.x, z: brookSpot.z });
+    return water;
+  }
+  const rainCloud = createRainCloud(); scene.add(rainCloud.group);
+  const boostRings = createBoostRings(scene);
+  // The sky drifts to a deeper blue now and then and back; a boost flashes it briefly.
+  const SKY = new THREE.Color(palette.sky), DEEP_SKY = new THREE.Color('#1b4c8c'), FLASH = new THREE.Color('#4f7fb0'), skyColor = new THREE.Color();
+  const groundMaterial = ground.material = ground.material.clone(); // the deep ground below the island shades with the sky
+  let skyMix = 0, skyGoal = 0, skyTimer = 40 + Math.random() * 20, skyFlash = 0, dripTimer = 0;
+  function updateSky(dt) {
+    skyTimer -= dt;
+    if (skyTimer <= 0) { skyGoal = skyGoal ? 0 : 1; skyTimer = skyGoal ? 10 + Math.random() * 6 : 40 + Math.random() * 25; }
+    skyMix += (skyGoal - skyMix) * Math.min(1, dt * 0.35); skyFlash = Math.max(0, skyFlash - dt * 1.8);
+    skyColor.copy(SKY).lerp(DEEP_SKY, skyMix).lerp(FLASH, skyFlash * 0.6);
+    scene.background.copy(skyColor); scene.fog.color.copy(skyColor); groundMaterial.color.copy(skyColor);
+  }
 
   const beeModels = new Map();
   // Soft shell fuzz for the honeybees: poles at head and tail, dark bands baked into the fur colour.
@@ -342,6 +383,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     $('bumble-marker').style.setProperty('--angle', `${(Math.atan2(dx, -dy) * 180 / Math.PI).toFixed(1)}deg`);
   }
 
+  const TAP_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+  let turboTap = false, lastTap = { code: '', time: 0 };
   let lastBag = 0, lastScore = 0, lastResult = null, lastRound = 1, uiTime = 0, alertTime = 0, heistNote = null, powerTip = 0, powerNag = 0, loadTip = 0;
   // Short reminder overlay while the nectar power waits to be used.
   function updatePowerTip(dt) {
@@ -403,6 +446,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (player) {
       $('bag').innerHTML = Array.from({ length: RULES.capacity }, (_, i) => `<i class="${i < player.bag ? 'filled' : ''}"></i>`).join('') + `<strong>${player.bag}<span> / 8</span></strong>`;
       const recharge = BOOST.cooldown - BOOST.duration;
+      if (player.turbo) { $('turbo-label').textContent = `SPEED ${player.turbo.toFixed(1)}s`; $('turbo-meter').style.width = `${player.turbo / TURBO.duration * 100}%`; }
+      else { $('turbo-label').textContent = player.turboWait ? `SPEED IN ${Math.ceil(player.turboWait)}s` : 'SPEED READY'; $('turbo-meter').style.width = `${(1 - player.turboWait / TURBO.cooldown) * 100}%`; }
       if (game.boosting(player)) { $('boost-label').textContent = `BOOST ${(player.boost - recharge).toFixed(1)}s`; $('boost-meter').style.width = `${(player.boost - recharge) / BOOST.duration * 100}%`; }
       else { $('boost-label').textContent = player.boost ? `BOOST IN ${Math.ceil(player.boost)}s` : 'BOOST READY'; $('boost-meter').style.width = `${(1 - player.boost / recharge) * 100}%`; }
       $('power-pips').innerHTML = Array.from({ length: POWER.need }, (_, i) => `<i class="${player.powered || i < player.power ? 'on' : ''}"></i>`).join('');
@@ -446,9 +491,14 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (started && event.type === 'bumble-enter' && event.mode !== 'heist' && reducedMotion) toast('Here it comes! Dodge the bumblebee!');
       if (started && event.type === 'heist-end') heistNote = { saved: event.rescued, drained: event.drained, time: 4 };
       if (started && event.type === 'power-ready') { powerTip = 3.5; powerNag = 14; }
+      if (started && event.type === 'scout-mood') { const lines = event.mood === 'fast' ? ['Wheee!', 'Coming through!', 'Zoom zoom!'] : ['Yawn…', 'So sleepy…', 'Slow and steady…']; bubbles.say(event.id, lines[Math.floor(Math.random() * lines.length)]); }
+      if (player && event.id === player.id && event.type === 'turbo' && started) { boostRings.trigger(false); skyFlash = 0.5; toast(`💨 Speed mode for ${TURBO.duration} seconds!`); }
+      if (player && event.id === player.id && event.type === 'boost' && started) { boostRings.trigger(event.power); skyFlash = event.power ? 1 : 0.6; }
+      if (player && event.id === player.id && event.type === 'rain-start' && started) { toast(`☁ ${game.rainRule.bumps} bumps in ${game.rainRule.window} s! A rain cloud soaks you: slower for ${RAIN.wet} seconds.`); }
+      if (player && event.id === player.id && event.type === 'rain-end') { const at = beeModels.get(player.id)?.group.position; if (at) burst.emit(at, { color: '#9fd6ff', count: 26, speed: 3.2, gravity: -6, size: 0.08, life: 0.7 }); if (view !== 'bee') bubbles.say(player.id, 'Brrrrr!'); }
       if (event.type === 'round-end') { alertTime = 0; $('bumble-alert').hidden = true; endCinematic(); }
       if (started && event.type === 'round-end' && event.result === 'complete') { toast('🍯 Goal reached! The hive overflows with honey!'); audio.play('deliver', null, { rate: 0.85 }); }
-      if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = 4;
+      if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = 6;
       if (event.type === 'topple') burst.emit(probe.set(event.x, event.y, event.z), { color: event.kind === 'tree' ? '#7fae5c' : '#f2a5c0', count: 22, speed: 3.4, gravity: -4, size: 0.14 });
       if (event.type === 'restore') burst.emit(probe.set(event.x, 0.6, event.z), { color: '#fff3b0', count: 10, speed: 1.6, gravity: 0, life: 0.5 });
       if (event.type === 'bumble-shoved') { burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffd23f', count: 30, speed: 5.5, gravity: -1, life: 0.8 }); if (player && event.id === player.id) beeView.bump(0.6); }
@@ -466,17 +516,18 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   }
   function input(dt) {
     const held = (...codes) => codes.some(code => keys.has(code));
+    const turbo = held('KeyE') || turboTap; turboTap = false;
     const forward = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
     const vertical = Number(held('Space')) - Number(held('KeyC'));
     const dash = held('ShiftLeft', 'ShiftRight');
     if (view === 'bee') {
       const turn = Number(held('ArrowRight')) - Number(held('ArrowLeft'));
-      if (turn) beeView.turn(turn, dt);
+      beeView.turn(turn, dt);
       const right = Number(held('KeyD')) - Number(held('KeyA'));
-      return { ...beeView.movement(forward, right, vertical), dash, face: beeView.yaw, strafe: right };
+      return { ...beeView.movement(forward, right, vertical), dash, turbo, face: beeView.yaw, strafe: right };
     }
     const right = Number(held('KeyD', 'ArrowRight')) - Number(held('KeyA', 'ArrowLeft'));
-    return { ...orbit.movement(forward, right), y: vertical, dash };
+    return { ...orbit.movement(forward, right), y: vertical, dash, turbo };
   }
   // Start of play: zoom in on the player's bee and make it glow for a moment, then ease back out.
   const SPOTLIGHT = 3.5, spotEye = new THREE.Vector3(), spotAim = new THREE.Vector3();
@@ -504,10 +555,12 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bee.load += (p.bag / RULES.capacity - bee.load) * Math.min(1, dt * 8);
       const basket = bee.load > 0.01 ? 0.05 + 0.09 * bee.load : 0;
       bee.baskets.forEach(b => { b.visible = basket > 0; b.scale.set(basket, basket * 1.15, basket * 1.3); });
-      bee.wings.forEach((w, i) => { w.rotation.z = Math.sin(elapsed * (game.boosting(p) ? 95 : 75)) * 0.45 * (i ? 1 : -1); });
+      bee.wings.forEach((w, i) => { w.rotation.z = Math.sin(elapsed * (game.boosting(p) || p.turbo ? 95 : 75)) * 0.45 * (i ? 1 : -1); });
       bee.shadow.position.set(p.x, 0.07, p.z); bee.shadow.material.opacity = 0.45 - Math.min(0.3, (p.y - WORLD.floor) * 0.035);
       bee.stars.group.visible = p.stun > 0.2; if (p.stun) bee.stars.update(elapsed);
       bee.aura?.update(dt, elapsed, { active: p.powered || (own && spotlight > 0.3), boosting: game.powerBoosting(p) });
+      // Shaking itself dry after the rain: a fast, fading wiggle.
+      if (p.shake) bee.body.rotation.z = Math.sin(elapsed * 55) * 0.55 * (p.shake / RAIN.shake);
       bee.group.visible = !(own && view === 'bee' && !game.celebration); // Name tags of bees right in front of the camera would cover the view (tour close-ups, bee view).
       const near = camera.position.distanceTo(bee.group.position); bee.label.visible = cinematic.active ? false : !started ? near > 11 : (view !== 'bee' && !spotlight) || near > 6;
       bee.fuzz.userData.setLayers(fuzzLayers(near));
@@ -541,13 +594,22 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     burst.update(dt);
     hiveBeacon = Math.max(0, hiveBeacon - dt); hive.update(elapsed, hiveBeacon);
     gauge.sync(game.honey); gauge.update(dt, elapsed); celebrate(dt, elapsed);
+    updateSky(paused ? 0 : dt); if (!paused) stream.update(dt, elapsed);
+    const mine = player && beeModels.get(player.id);
+    if (mine) {
+      rainCloud.group.position.copy(mine.group.position).add(probe.set(0, 2.1, 0)); // above the name tag and bubbles
+      boostRings.update(paused ? 0 : dt, mine.group.position);
+      if (player.wet && !paused) { dripTimer -= dt; if (dripTimer <= 0) { dripTimer = 0.25; burst.emit(mine.group.position, { color: '#9fd6ff', count: 2, speed: 0.4, gravity: -7, size: 0.05, life: 0.5 }); } }
+    }
+    rainCloud.update(paused ? 0 : dt, elapsed, !!player?.wet && view !== 'bee');
+    $('rain-overlay').hidden = !(player?.wet && view === 'bee');
     motes.rotation.y = Math.sin(elapsed * 0.07) * 0.1;
     const own = player && beeModels.get(player.id);
     if (cinematic.active && cinematicFrame(dt)) { /* The bumblebee entrance placed the camera. */ }
     else if (!started && !reducedMotion) { /* The landing tour placed the camera. */ }
     else if (view === 'bee' && own && !game.celebration) {
-      beeView.apply(camera, own.group.position, dt, elapsed, { strafe, boosting: game.boosting(player), stunned: player.stun > 0 });
-      viewModel.update(elapsed, { boosting: game.boosting(player) });
+      beeView.apply(camera, own.group.position, dt, elapsed, { strafe, boosting: game.boosting(player) || player.turbo > 0, stunned: player.stun > 0 });
+      viewModel.update(elapsed, { boosting: game.boosting(player) || player.turbo > 0 });
     } else {
       // The garden view follows the player more on the larger island but keeps the hive in frame.
       orbitTarget.lerp(probe.set(player ? player.x * 0.55 : 0, player ? Math.max(0, player.y - 2) * 0.5 : 0, player ? player.z * 0.55 : 0), 1 - Math.exp(-dt * 3));
@@ -568,11 +630,11 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     }
     if (!started && audio.enabled && !paused) { // landing screen: hear the garden from the tour camera
       camera.getWorldDirection(probe);
-      soundscape.frame(game, null, dt, { listener: { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(probe.x, probe.z), pitch: Math.asin(Math.max(-1, Math.min(1, probe.y))) }, music });
+      soundscape.frame(game, null, dt, { listener: { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(probe.x, probe.z), pitch: Math.asin(Math.max(-1, Math.min(1, probe.y))) }, music, water: nearBrook(camera.position) });
     }
     if (player && started) {
       const listener = cinematic.active ? { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(-camera.matrixWorld.elements[8], -camera.matrixWorld.elements[10]) } : view === 'bee' ? { x: player.x, y: player.y, z: player.z, yaw: beeView.yaw, pitch: beeView.pitch } : { x: player.x, y: player.y, z: player.z, yaw: orbit.azimuth + Math.PI };
-      if (!paused) soundscape.frame(game, player, dt, { listener, beeView: view === 'bee', music });
+      if (!paused) soundscape.frame(game, player, dt, { listener, beeView: view === 'bee', music, water: nearBrook(listener) });
     }
     renderer.render(scene, camera);
     bubbles.update(dt, camera, width, height, locate);

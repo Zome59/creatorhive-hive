@@ -5,10 +5,13 @@ const wrap = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
 
 // First-person "bee view": the camera sits on the player's head. W flies where you look,
 // so looking down and pressing W dives; Space/C still climb and sink directly.
+// Fine steering: radians per mouse pixel, and the arrow-key turn rate (rad/s), which eases in and out.
+export const LOOK = Object.freeze({ yaw: 0.0015, pitch: 0.0013, turn: 1.3, ease: 4 });
 export class BeeView {
-  constructor() { this.yaw = 0; this.pitch = -0.1; this.roll = 0; this.shake = 0; this.fov = 72; }
-  look(dx, dy) { this.yaw = wrap(this.yaw - dx * 0.0026); this.pitch = clamp(this.pitch - dy * 0.0022, -1.25, 1.1); }
-  turn(direction, dt) { this.yaw = wrap(this.yaw - direction * 2.2 * dt); }
+  constructor() { this.yaw = 0; this.pitch = -0.1; this.roll = 0; this.shake = 0; this.fov = 72; this.turning = 0; }
+  look(dx, dy) { this.yaw = wrap(this.yaw - dx * LOOK.yaw); this.pitch = clamp(this.pitch - dy * LOOK.pitch, -1.25, 1.1); }
+  // Called every frame (direction 0 lets the turn ease out), so a short tap turns only a little.
+  turn(direction, dt) { this.turning += (direction - this.turning) * Math.min(1, dt * LOOK.ease); this.yaw = wrap(this.yaw - this.turning * LOOK.turn * dt); }
   movement(forward, right, vertical = 0) {
     const cp = Math.cos(this.pitch), sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     return { x: forward * sy * cp - right * cy, y: clamp(forward * Math.sin(this.pitch) + vertical, -1, 1), z: forward * cy * cp + right * sy };

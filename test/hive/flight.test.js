@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, BOOST, FLOWERS, HEIST, RULES } from '../../src/games/hive/simulation.js';
+import { Game, BOOST, TURBO, PACE, scoutPace, FLOWERS, HEIST, RULES } from '../../src/games/hive/simulation.js';
 import { WORLD, OBSTACLES, contact } from '../../src/games/hive/world.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
@@ -267,4 +267,46 @@ test('reaching the goal starts a celebration: a loop around the hive, then a hon
   angles.forEach((a, i) => { if (i) assert.ok(Math.abs(a - angles[i - 1] - Math.PI / 3) < 0.15, 'evenly spaced, 60° apart'); });
   const lost = new Game({ bots: 0 }); lost.addPlayer(); lost.remaining = 0.01; lost.tick(0.05);
   assert.equal(lost.result, 'time'); assert.equal(lost.celebration, null, 'no party without the goal');
+});
+test('five bumps within the window bring a rain cloud: slower for five seconds, then a shake', async () => {
+  const { RAIN } = await import('../../src/games/hive/simulation.js');
+  const game = new Game({ bots: 0 }), bee = game.addPlayer(), tree = OBSTACLES.find(o => o.kind === 'tree' && o.shape === 'cylinder');
+  const seen = [];
+  const bonk = () => { Object.assign(bee, { x: tree.x + 3, y: 1.5, z: tree.z, kx: 0, ky: 0, kz: 0, bonk: 0 }); for (let i = 0; i < 14; i++) { game.setInput(bee.id, { x: -1 }); game.tick(0.05); seen.push(...game.events); } };
+  for (let n = 0; n < RAIN.bumps - 1; n++) bonk();
+  assert.ok(!seen.some(e => e.type === 'rain-start'), 'four bumps are fine');
+  bonk();
+  assert.ok(seen.some(e => e.type === 'rain-start'), 'the fifth bump brings the cloud'); assert.ok(bee.wet > 0);
+  const fly = () => { Object.assign(bee, { x: -20, y: 2, z: -5, kx: 0, ky: 0, kz: 0 }); for (let i = 0; i < 10; i++) { game.setInput(bee.id, { z: 1 }); game.tick(0.05); } return bee.z + 5; };
+  const wet = fly();
+  for (let t = 0; t < RAIN.wet; t += 0.05) { game.setInput(bee.id, { z: 0.01 }); game.tick(0.05); seen.push(...game.events); }
+  assert.ok(seen.some(e => e.type === 'rain-end')); assert.ok(bee.shake > 0, 'shakes itself dry'); assert.equal(bee.wet, 0);
+  const dry = fly();
+  assert.ok(wet < dry * 0.75, `wet flight ${wet.toFixed(1)} vs dry ${dry.toFixed(1)}`);
+  // The rule can be changed in the settings.
+  const strict = new Game({ bots: 0 }), b2 = strict.addPlayer(); strict.rainRule = { bumps: 2, window: 10 };
+  strict.noteBump(b2); assert.equal(b2.wet, 0); strict.noteBump(b2); assert.ok(b2.wet > 0);
+  const slow = new Game({ bots: 0 }), b3 = slow.addPlayer(); slow.rainRule = { bumps: 2, window: 1 };
+  slow.noteBump(b3); for (let i = 0; i < 30; i++) slow.tick(0.05); slow.noteBump(b3); assert.equal(b3.wet, 0, 'old bumps fall out of the window');
+});
+test('speed mode: faster for 5 seconds, then a 20-second recharge; scouts never use it', () => {
+  const game = new Game({ bots: 0 }), bee = game.addPlayer(), scout = game.addPlayer(true);
+  Object.assign(bee, { x: -20, y: 3, z: 12 }); Object.assign(scout, { bot: true });
+  const fly = turbo => { game.setInput(bee.id, { x: 1, turbo }); game.tick(0.05); };
+  fly(false); fly(false); const normal = Math.hypot(bee.vx, bee.vz);
+  fly(true); assert.equal(events(game, 'turbo').length, 1); fly(false);
+  assert.ok(Math.abs(Math.hypot(bee.vx, bee.vz) / normal - TURBO.factor) < 0.02, 'flies faster');
+  for (let t = 0; t < TURBO.duration; t += 0.05) { Object.assign(bee, { x: -20, z: 12 }); fly(true); }
+  assert.equal(bee.turbo, 0, 'speed mode ends after its duration even while the key is held');
+  assert.ok(bee.turboWait > TURBO.cooldown - 1, 'then it recharges');
+  fly(true); assert.equal(bee.turbo, 0, 'no restart while recharging');
+  game.setInput(scout.id, { x: 1, turbo: true }); game.tick(0.05); assert.equal(scout.turbo, 0);
+});
+test('scouts fly at slightly different paces, with rare fast or lazy spells', () => {
+  const bases = [1, 2, 3, 4, 5, 6].map(id => { const runs = []; for (let w = 0; w < 400; w++) runs.push(scoutPace(id, w * PACE.window + 1)); return runs; });
+  const typical = bases.map(runs => runs.find(r => !r.mood).pace);
+  assert.ok(new Set(typical.map(v => v.toFixed(3))).size === 6, 'every scout has its own pace');
+  assert.ok(typical.every(v => v > 0.87 && v < 1.13), 'within ±12 %');
+  const spells = bases.flat(), fast = spells.filter(r => r.mood === 'fast').length / spells.length, slow = spells.filter(r => r.mood === 'slow').length / spells.length;
+  assert.ok(fast > 0.03 && fast < 0.12 && slow > 0.03 && slow < 0.12, `rare spells (fast ${fast.toFixed(3)}, slow ${slow.toFixed(3)})`);
 });

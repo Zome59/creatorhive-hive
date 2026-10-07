@@ -4,7 +4,7 @@ import * as THREE from 'three';
 // a cell filled mostly by the player glows orange, scout honey is gold. Delivered honey flies into
 // the next cell as droplets. The ledger keeps who brought each nectar, newest last (thieves drink
 // from the top).
-export const GAUGE = Object.freeze({ cells: 30, unit: 12, radius: 2.72, y: 0.36 }); // 30 cells × 12 = the 360-nectar goal
+export const GAUGE = Object.freeze({ cells: 35, unit: 10, radius: 2.72, y: 0.36 }); // 35 cells × 10 = the 350-nectar goal
 const COLORS = Object.freeze({ empty: new THREE.Color('#4d3f27'), scouts: new THREE.Color('#f2b52a'), player: new THREE.Color('#ff7a1a') });
 
 export function createHoneyGauge({ cells = GAUGE.cells, unit = GAUGE.unit, radius = GAUGE.radius, y = GAUGE.y } = {}) {
@@ -48,7 +48,8 @@ export function createHoneyGauge({ cells = GAUGE.cells, unit = GAUGE.unit, radiu
         const fill = Math.max(0, Math.min(1, (ledger.length - i * unit) / unit));
         shown[i] += (fill - shown[i]) * Math.min(1, dt * 5);
         const [x, z, a] = spot(i), level = shown[i];
-        dummy.position.set(x, y - 0.1 + level * 0.14, z); // full cells bulge a little above the wax rim dummy.rotation.set(0, a, 0); dummy.scale.set(0.98, Math.max(0.05, level), 0.98); dummy.updateMatrix(); comb.setMatrixAt(i, dummy.matrix);
+        // Full cells bulge a little above the wax rim.
+        dummy.position.set(x, y - 0.1 + level * 0.14, z); dummy.rotation.set(0, a, 0); dummy.scale.set(0.98, Math.max(0.05, level), 0.98); dummy.updateMatrix(); comb.setMatrixAt(i, dummy.matrix);
         color.copy(COLORS.empty).lerp(COLORS[owner(i)], Math.min(1, level * 1.4));
         if (level > 0.98 && owner(i) === 'player') color.multiplyScalar(1 + Math.sin(elapsed * 3 + i) * 0.06);
         comb.setColorAt(i, color);

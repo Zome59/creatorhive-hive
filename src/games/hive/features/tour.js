@@ -1,7 +1,7 @@
 // Landing-screen tour: camera shots of the live garden with short captions explaining the game.
 // It ends on "Let's go!" and loops while nobody has started.
 export const TOUR_STEPS = Object.freeze([
-  { shot: 'orbit', time: 5, title: 'Welcome to the honey garden', text: 'Help the hive collect 360 nectar in 3 minutes, together with 6 AI scouts.' },
+  { shot: 'orbit', time: 5, title: 'Welcome to the honey garden', text: 'Help the hive collect 350 nectar in 3 minutes, together with 6 AI scouts.' },
   { shot: 'chase', time: 5, title: 'Collect nectar', text: 'Fly into the glowing honey drops on the flowers. Your bag holds 8, and every 6 drops make your bee glow: its next boost is a power boost.' },
   { shot: 'bee', time: 5.5, title: 'Fly high and low', text: 'Flowers grow at three heights: SPACE climbs, C sinks. Press V to fly in bee view, like this.' },
   { shot: 'hive', time: 4.5, title: 'Deliver to the hive', text: 'Bring your nectar home through the glowing ring around the golden hive. Bigger loads score more points, but a heavy bee flies slower.' },

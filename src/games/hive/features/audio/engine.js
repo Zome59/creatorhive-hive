@@ -27,7 +27,7 @@ async function defaultLoad(file) {
 
 // Created on the first play gesture. Loops are keyed (one buzz per bee); one-shots are fire-and-forget.
 export function createHiveAudio({ createContext = defaultContext, load = defaultLoad, random = Math.random } = {}) {
-  let context = null, master, enabled = false, running = false, volume = 0.85, mix = 1;
+  let context = null, master, enabled = false, running = false, volume = 1.3, mix = 1;
   const buffers = new Map(), loops = new Map(), voices = new Set(), buses = new Map(), requested = new Set();
   const levels = new Map(MIXER.map(channel => [channel.id, 1]));
   const output = bus => buses.get(bus) ?? master;
@@ -37,7 +37,7 @@ export function createHiveAudio({ createContext = defaultContext, load = default
       context = createContext(); if (!context) return null;
       master = context.createGain(); master.gain.value = 0;
       const compressor = context.createDynamicsCompressor();
-      compressor.threshold.value = -14; compressor.knee.value = 10; compressor.ratio.value = 5;
+      compressor.threshold.value = -10; compressor.knee.value = 10; compressor.ratio.value = 4;
       master.connect(compressor); compressor.connect(context.destination);
       // One gain per mixer channel, all feeding the master (whose level is the master slider).
       for (const channel of MIXER) if (channel.id !== 'master') { const bus = context.createGain(); bus.gain.value = levels.get(channel.id); bus.connect(master); buses.set(channel.id, bus); }

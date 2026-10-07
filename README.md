@@ -1,6 +1,6 @@
 # The Hive
 
-Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 360 nectar in three minutes. Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
+Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 350 nectar in three minutes. Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
 
 ## Run locally
 
@@ -95,6 +95,7 @@ Publishing is performed by Cloudflare's connected build after you push a commit.
 | WASD or arrow keys | Fly relative to the camera (garden view) |
 | Space / C | Climb / sink (between the grass and the treetops); the same keys whether you steer with WASD or the arrow keys |
 | Shift | 2.5-second boost; recharges in 3.5 seconds, faster with every nectar you collect. When your bee glows, it is a **power boost** |
+| E, or double-tap the key you fly with | **Speed mode**: 45 % faster for 5 seconds, then 20 seconds to recharge (the blue **SPEED** meter in the HUD fills up again) |
 | V or 👁 button | Toggle **bee view** (first person) |
 | Left click + drag | Rotate the garden view; in bee view, look around |
 | Scroll wheel | Zoom in / out (garden view) |
@@ -103,17 +104,21 @@ Publishing is performed by Cloudflare's connected build after you push a commit.
 
 A large **controls panel**, by default hanging half over the left edge of the game, lists every key, with the altitude keys highlighted; keys light up while you hold them. Drag it by its header anywhere, even beside the game. **H** or the 🎮 button shows and hides it. In fullscreen it starts hidden (H brings it back), and a menu bar at the top shows the main shortcuts with buttons for controls, view, sound, pause, and leaving fullscreen.
 
-**Bee view** puts the camera on your bee's head, with its antennae and wing tips at the edge of the view. Click the garden to steer with the mouse (pointer lock; **Esc** releases it) or drag to look. **W** flies where you look, so looking down and pressing W dives; **A/D** strafe, **←/→** turn, Space/C still climb and sink. Boost widens the view.
+**Bee view** puts the camera on your bee's head, with its antennae and wing tips at the edge of the view. Click the garden to steer with the mouse (pointer lock; **Esc** releases it) or drag to look. **W** flies where you look, so looking down and pressing W dives; **A/D** strafe, **←/→** turn (gently: the turn eases in, so a short tap turns only a little), Space/C still climb and sink. Boost and speed mode widen the view.
 
-Touch devices show directional, climb/sink, and boost buttons; drag the garden to rotate the view (or to look in bee view). Nectar collects automatically when you fly close to a honey drop; drops grow on low meadow flowers, mid-height flowers, and tall sunflowers, so altitude matters. Your bag holds eight drops. Fly into the center hive's glowing ring to deliver. Scouts are AI, visibly labeled throughout the interface. Leaving the window pauses active play.
+Touch devices show directional, climb/sink, boost, and speed buttons; drag the garden to rotate the view (or to look in bee view). Nectar collects automatically when you fly close to a honey drop; drops grow on low meadow flowers, mid-height flowers, and tall sunflowers, so altitude matters. Your bag holds eight drops. Fly into the center hive's glowing ring to deliver. Scouts are AI, visibly labeled throughout the interface. They fly at slightly different paces (±12 %), and now and then one gets a short burst of zeal (“Wheee!”) or a lazy spell (“Yawn…”). Leaving the window pauses active play.
+
+### Brook, waterfall, and stones
+
+A small brook springs up in a pond in the meadow, meanders between the flowers to the island's rim, and pours over the edge as a waterfall that fades into mist far below. Pebbles line its banks and lie in its bed, and small stones are scattered across the meadow. You hear the brook from wherever it is closest to your bee, and the waterfall roars a little deeper near the rim.
 
 ### Honey in the hive
 
-A ring of 30 honeycomb cells around the hive base shows the hive's honey, one cell per 12 nectar. Delivered nectar flies into the next cells as droplets; cells you filled are **orange**, the scouts' are **gold**, and the HUD bar shows your share in orange too. When the bumblebee drinks, the newest cells empty first.
+A ring of 30 honeycomb cells around the hive base shows the hive's honey, one cell per 10 nectar. Delivered nectar flies into the next cells as droplets; cells you filled are **orange**, the scouts' are **gold**, and the HUD bar shows your share in orange too. When the bumblebee drinks, the newest cells empty first.
 
 ### Goal reached
 
-When the hive reaches 360 nectar the round ends in a party: the hive swells, golden honey floods out until it covers about a third of the island, the trees turn gold, and all bees loop around the hive cheering before they form a slowly turning **honeycomb** above it (your bee in the centre, the six scouts around it). The camera frames the party; after six seconds the highscore table appears.
+When the hive reaches 350 nectar the round ends in a party: the hive swells, golden honey floods out until it covers about a third of the island, the trees turn gold, and all bees loop around the hive cheering before they form a slowly turning **honeycomb** above it (your bee in the centre, the six scouts around it). The camera frames the party; after six seconds the highscore table appears.
 
 The goal is tuned to be reachable but not trivial: in simulations, six scouts on their own rarely make it in time, and an average player who also chases the honey thief off the hive gets there with roughly a minute to spare.
 
@@ -131,13 +136,17 @@ Bees, trees, flowers, and the hive are solid. Flying into another bee bumps both
 
 Around the middle of each round (half the time or half the goal, whichever comes first, slightly randomized) a big, fuzzy bumblebee arrives. A red alert (**“ALERT – BUMBLEBEE INCOMING”**) with a soft alarm and a countdown announces it four seconds ahead, and an edge marker points to where it will enter. It wobbles across the garden for about 20 seconds, lurches toward bees (often you), and knocks the bees it hits flying: they tumble with dizzy stars for a moment, spill up to two nectar, and every bee nearby shouts at it. After a few seconds they calm down and fly on. Use altitude and boost to dodge it.
 
+**Rain cloud.** Bump into bees or things **5 times within 20 seconds** and a small grey cloud gathers above your bee and rains on it: wet wings fly at 60 % speed for 5 seconds (the bee view shows rain streaks). Then the cloud drifts off, your bee shakes itself dry in a spray of droplets, and flies on normally. Both numbers are adjustable under **⚙ Game settings** in the controls panel (3–10 bumps, 10–40 seconds).
+
+**Sky and boost.** The sky drifts to a deeper blue now and then and back again. Starting a boost sends a few golden energy rings pulsing up around your bee and briefly brightens the sky (more with a power boost).
+
 Each time it arrives, a short **entrance cutscene** plays (letterbox bars, about five seconds; Enter, Esc, or a click skips it): the bumblebee flies at the camera, zooms past it, and then the camera looks over its shoulder into the garden as it drops in. The round clock stops and your bee waits safely meanwhile.
 
 Later in the round (about three quarters of the time or of the goal, at least six seconds after its first visit) it comes back, announced the same way, usually bumbles around knocking bees over for a few seconds, then lands on top of the hive, and **drinks the hive's honey** (2.5 nectar per second). An information sign tells you what to do: the scouts swarm it and poke it, but only you can get it off. **Bump into it three times** and it tumbles off the hive and flies away while the scouts cheer. Left alone, it leaves after 28 seconds with whatever it drank.
 
 ### Sound
 
-Sound starts with **▶** and can be muted with the **♪** button. The **🎚 Sound mixer** at the bottom of the controls panel has a master volume and sliders (0–150 %) for other bees, your bee, the bumblebee, voices, effects, garden ambience, and music, plus **↺ Reset to default**. A quiet background plays by default: **Summer meadow** (only nature: a soft breeze in the grass, a brook now and then, a few quiet birds), or **Synthwave**, or **Off**; these files load only when played. Not every speech bubble gets a gibberish voice, so the garden stays calm. Mixer settings last for the current page session. Every bee has its own positioned buzz: the listener is your bee, so other bees get louder as they come closer and pan left/right with your view. Scouts zipping past make a quick *bsss* fly-by. Distant bees fade quickly, and your own bee's buzz stays soft. Bumps, bonks, nectar pickups, deliveries, boosts, the bumblebee's deep drone, crash, and honey slurping, a soft two-note warning chime, and the bees' gibberish complaints are all positioned in the garden, over a quiet meadow ambience. Audio pauses with the game, in hidden tabs, and when switching games. Sources and rights: [public/games/hive/audio/README.md](public/games/hive/audio/README.md).
+Sound starts with **▶** and can be muted with the **♪** button. The **🎚 Sound mixer** at the bottom of the controls panel has a master volume and sliders (0–150 %) for other bees, your bee, the bumblebee, voices, effects, garden ambience, and music, plus **↺ Reset to default**. The landing screen plays a light mix of the garden and fades up to the full default when the round starts. A quiet background plays by default: **Summer meadow** (only nature: a soft breeze in the grass and a brook now and then; no birds, no instruments), or **Synthwave**, or **Off**; these files load only when played. Not every speech bubble gets a gibberish voice, so the garden stays calm. Mixer settings last for the current page session. Every bee has its own positioned buzz: the listener is your bee, so other bees get louder as they come closer and pan left/right with your view. Scouts zipping past make a quick *bsss* fly-by. Distant bees fade quickly, and your own bee's buzz stays soft. Bumps, bonks, nectar pickups, deliveries, boosts, the bumblebee's deep drone, crash, and honey slurping, a soft two-note warning chime, rain from the little cloud and the shake-dry, and the bees' gibberish complaints are all positioned in the garden, over a quiet meadow ambience, with the brook and the waterfall positioned where they flow. Audio pauses with the game, in hidden tabs, and when switching games. Sources and rights: [public/games/hive/audio/README.md](public/games/hive/audio/README.md).
 
 ## Privacy and scope
 
