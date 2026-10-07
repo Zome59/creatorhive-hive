@@ -38,7 +38,10 @@ try {
   host.select(games[0].id);
 } catch (error) {
   console.error(error);
-  $('game-ui').innerHTML = '<div class="intro"><div><h2>WebGL 2 required.</h2><p>Enable hardware acceleration to play.</p></div></div>';
+  // Only blame the graphics when the renderer itself could not start; any other error is a loading problem.
+  $('game-ui').innerHTML = renderer
+    ? '<div class="intro"><div><h2>The game could not start.</h2><p>Please reload the page. Details are in the browser console.</p></div></div>'
+    : '<div class="intro"><div><h2>WebGL 2 required.</h2><p>Enable hardware acceleration to play.</p></div></div>';
 }
 $('settings-button').onclick = () => openDisplaySettings({ openDialog, notify, pause: () => host?.pause(), toggleFullscreen: arenaFullscreen });
 function resize() {

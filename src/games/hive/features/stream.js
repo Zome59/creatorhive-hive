@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { WORLD, FLOWERS, TREES } from '../world.js';
+import { WORLD, FLOWERS, TREES, BUSHES, STREAM, STREAM_INFO, STREAM_RULES, STREAM_Y, STREAM_LENGTH as LENGTH, streamWidth as widthAt, streamDistance } from '../world.js';
+// The route itself lives in world.js (static layout); re-exported here for the scene and tests.
+export { STREAM, STREAM_INFO, STREAM_RULES, STREAM_Y, streamDistance, streamClearance } from '../world.js';
 
 // A brook that springs up in the meadow, meanders to the rim of the floating island, and pours over the
 // edge as a waterfall. Everything is procedural; textures are DataTextures (no canvas), so it also builds in Node.
@@ -11,118 +13,9 @@ import { WORLD, FLOWERS, TREES } from '../world.js';
 //
 // Four draw calls: brook ribbon, waterfall ribbon, instanced stones, one additive particle set (mist, splashes, sparkles).
 
-// Water surface: the tallest hex-tile top is 0.095 (see scene.js), the honey-flood overlay sits at 0.12.
-export const STREAM_Y = 0.104;
-export const STREAM_RULES = Object.freeze({ flowers: 1.6, trees: 2.4, hive: 5, springMin: 10, springMax: 14 });
-const TILE = 1.7, STEP_X = Math.sqrt(3) * TILE, STEP_Z = 2.55; // the island's hex tiles, as built in scene.js
-
 const TAU = Math.PI * 2;
 const smooth = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-
-// ---------------------------------------------------------------------------------------------------------
-// Route. The brook runs along a (nearly) radial line with a gentle sinusoidal meander. The route is searched
-// over angle, spring radius, and meander side for the largest clearance from flowers, trees, and the hive.
-
-// Only the outer ring of tiles matters for the rim.
-const RIM_TILES = [];
-for (let q = -13; q <= 13; q++) for (let r = -13; r <= 13; r++) {
-  const x = STEP_X * (q + r / 2), z = STEP_Z * r, d = Math.hypot(x, z);
-  if (d <= WORLD.island + 0.6 && d >= WORLD.island - 6) RIM_TILES.push({ x, z });
-}
-// How far the tile tops reach along the ray at angle `theta`, offset sideways by `lateral`.
-function lipRadius(theta, lateral) {
-  const ux = Math.cos(theta), uz = Math.sin(theta); let best = 0;
-  for (const t of RIM_TILES) {
-    const side = -t.x * uz + t.z * ux - lateral;
-    if (side > -TILE && side < TILE) best = Math.max(best, t.x * ux + t.z * uz + Math.sqrt(TILE * TILE - side * side));
-  }
-  return best;
-}
-function lipSpread(theta) { let lo = Infinity, hi = 0; for (let l = -0.8; l <= 0.801; l += 0.1) { const r = lipRadius(theta, l); lo = Math.min(lo, r); hi = Math.max(hi, r); } return hi - lo; }
-
-const SMOOTH_RIM = 0.3; // largest allowed difference in rim radius across the width of the water at the lip
-const BEND_T = [0, 0.24, 0.5, 0.74, 0.9, 1], BEND_L = [0, 0.8, -1.0, 0.8, 0, 0]; // sideways offset at the control points; the last stretch runs straight out
-function bend(t) {
-  let i = 0; while (i < BEND_T.length - 2 && t > BEND_T[i + 1]) i++;
-  const k = 0.5 - 0.5 * Math.cos(Math.PI * smooth((t - BEND_T[i]) / (BEND_T[i + 1] - BEND_T[i])));
-  return BEND_L[i] + (BEND_L[i + 1] - BEND_L[i]) * k;
-}
-function trace(theta, r0, sign, rEnd, count) {
-  const ux = Math.cos(theta), uz = Math.sin(theta), out = new Float64Array(count * 2 + 2);
-  for (let i = 0; i <= count; i++) { const t = i / count, r = r0 + (rEnd - r0) * t, l = sign * bend(t); out[i * 2] = ux * r - uz * l; out[i * 2 + 1] = uz * r + ux * l; }
-  return out;
-}
-// Smallest margin over the required distances (positive = every rule is met), measured at the points.
-const OBSTACLES = [FLOWERS.map(f => [f.x, f.z, STREAM_RULES.flowers]), TREES.map(t => [t.x, t.z, STREAM_RULES.trees])].flat();
-function margin(flat) {
-  let m = Infinity;
-  for (const [ox, oz, gap] of OBSTACLES) {
-    let near = Infinity;
-    for (let i = 0; i < flat.length; i += 2) { const dx = flat[i] - ox, dz = flat[i + 1] - oz; near = Math.min(near, dx * dx + dz * dz); }
-    m = Math.min(m, Math.sqrt(near) - gap);
-  }
-  for (let i = 0; i < flat.length; i += 2) m = Math.min(m, Math.hypot(flat[i], flat[i + 1]) - STREAM_RULES.hive);
-  return m;
-}
-
-const SEGMENTS = 64;
-const ROUTE = (() => {
-  // Candidates: every 1.5 degrees, three spring radii, both meander sides. The hex-tile rim is only smooth (no notches
-  // at the lip) along a few directions, so those are preferred; among them the route with the largest clearance wins.
-  const all = [];
-  for (let deg = 0; deg < 360; deg += 1.5) {
-    const theta = deg * Math.PI / 180, spread = lipSpread(theta); if (spread > SMOOTH_RIM) continue;
-    const rEnd = lipRadius(theta, 0);
-    for (const r0 of [10.5, 12, 13.5]) for (const sign of [1, -1]) all.push({ theta, r0, sign, rEnd, spread, m: margin(trace(theta, r0, sign, rEnd, SEGMENTS)) });
-  }
-  let best = all.reduce((a, b) => (b.m > a.m ? b : a));
-  // Fine-tune the spring radius and the angle around the winner.
-  for (let d = -1.5; d <= 1.501; d += 0.25) for (let dr = -1; dr <= 1.001; dr += 0.25) {
-    const theta = best.theta + d * Math.PI / 180, spread = lipSpread(theta), r0 = best.r0 + dr;
-    if (spread > SMOOTH_RIM || r0 < STREAM_RULES.springMin || r0 > STREAM_RULES.springMax) continue;
-    const rEnd = lipRadius(theta, 0), m = margin(trace(theta, r0, best.sign, rEnd, SEGMENTS));
-    if (m > best.m + 1e-9) best = { theta, r0, sign: best.sign, rEnd, spread, m };
-  }
-  return best;
-})();
-
-const FLAT = trace(ROUTE.theta, ROUTE.r0, ROUTE.sign, ROUTE.rEnd, SEGMENTS);
-/** Centre-line of the brook from the spring (index 0) to the island lip (last), as frozen {x, z} points. */
-export const STREAM = Object.freeze(Array.from({ length: SEGMENTS + 1 }, (_, i) => Object.freeze({ x: FLAT[i * 2], z: FLAT[i * 2 + 1] })));
-const ARC = (() => { const s = [0]; for (let i = 1; i < STREAM.length; i++) s.push(s[i - 1] + Math.hypot(STREAM[i].x - STREAM[i - 1].x, STREAM[i].z - STREAM[i - 1].z)); return s; })();
-const LENGTH = ARC[ARC.length - 1];
-/** Where the brook starts and ends, and the direction in which it leaves the island. */
-export const STREAM_INFO = Object.freeze({ spring: STREAM[0], lip: STREAM[STREAM.length - 1], exit: Object.freeze({ x: Math.cos(ROUTE.theta), z: Math.sin(ROUTE.theta) }), angle: ROUTE.theta, length: LENGTH, rimSpread: ROUTE.spread });
-
-// Width of the water at distance `s` from the spring: a rounded spring pool, then a runnel widening to the lip.
-const CAP = 0.8;
-function widthAt(s) {
-  const k = Math.min(1, s / LENGTH), body = 1.1 + 0.5 * (0.6 * k + 0.4 * smooth(k));
-  const pool = 0.4 * Math.exp(-(((s - 0.95) / 0.7) ** 2)), cap = s >= CAP ? 1 : Math.sqrt(Math.max(0, 1 - ((CAP - s) / CAP) ** 2));
-  return Math.max(0.02, (body + pool) * cap);
-}
-const HALF = ARC.map(s => widthAt(s) / 2);
-
-function segmentDistance(px, pz, a, b) {
-  const dx = b.x - a.x, dz = b.z - a.z, t = Math.max(0, Math.min(1, ((px - a.x) * dx + (pz - a.z) * dz) / (dx * dx + dz * dz || 1)));
-  return Math.hypot(px - (a.x + dx * t), pz - (a.z + dz * t));
-}
-/** Distance from (x, z) to the water's edge: 0 or less means the point is in the water. Includes the soft bank (1.35x width). */
-export function streamDistance(x, z) {
-  let best = Infinity;
-  for (let i = 1; i < STREAM.length; i++) {
-    if (Math.hypot(x - STREAM[i].x, z - STREAM[i].z) > 6) continue; // cheap reject: segments are about 0.35 long
-    best = Math.min(best, segmentDistance(x, z, STREAM[i - 1], STREAM[i]) - Math.max(HALF[i - 1], HALF[i]) * 1.35);
-  }
-  return best;
-}
-/** Minimum distances from the centre-line (measured along the segments) to flowers, inside trees, all trees, and the hive centre. */
-export function streamClearance(points = STREAM) {
-  const nearest = list => { let d = Infinity; for (const o of list) for (let i = 1; i < points.length; i++) d = Math.min(d, segmentDistance(o.x, o.z, points[i - 1], points[i])); return d; };
-  const hive = Math.min(...points.map(p => Math.hypot(p.x, p.z)));
-  return { flowers: nearest(FLOWERS), trees: nearest(TREES.filter(t => t.inside)), allTrees: nearest(TREES), hive, spring: Math.hypot(points[0].x, points[0].z), lip: Math.hypot(points[points.length - 1].x, points[points.length - 1].z) };
-}
 
 // ---------------------------------------------------------------------------------------------------------
 // Water textures (DataTexture, periodic, so they scroll seamlessly). Streaky ripples along the flow direction.
@@ -244,7 +137,7 @@ export function createStream() {
 
   // --- stones
   const rand = rng(8821), stones = [];
-  const clear = (x, z, flowerGap = 1, treeGap = 1.1) => Math.hypot(x, z) >= STREAM_RULES.hive + 0.2 && Math.hypot(x, z) <= 29.2 && FLOWERS.every(f => Math.hypot(f.x - x, f.z - z) >= flowerGap) && TREES.every(t => Math.hypot(t.x - x, t.z - z) >= treeGap);
+  const clear = (x, z, flowerGap = 1, treeGap = 1.1) => Math.hypot(x, z) >= STREAM_RULES.hive + 0.2 && Math.hypot(x, z) <= 29.2 && FLOWERS.every(f => Math.hypot(f.x - x, f.z - z) >= flowerGap) && TREES.every(t => Math.hypot(t.x - x, t.z - z) >= treeGap) && BUSHES.every(b => Math.hypot(b.x - x, b.z - z) >= b.size + 0.5);
   const addStone = (kind, x, z, size, lift = 0.35) => {
     const sx = size * (0.85 + 0.3 * rand()), sy = size * (0.42 + 0.3 * rand()), sz = size * (0.85 + 0.3 * rand());
     stones.push({ kind, x, y: (kind === 'bed' ? STREAM_Y - 0.02 : 0.04) + sy * lift * 1.6, z, radius: Math.max(sx, sz), sx, sy, sz, yaw: rand() * TAU, tilt: (rand() - 0.5) * 0.35, color: STONE_COLORS[Math.floor(rand() * STONE_COLORS.length)] });

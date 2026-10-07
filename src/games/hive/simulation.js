@@ -9,6 +9,9 @@ export const CELEBRATION = Object.freeze({ loop: 3.5, loopRadius: 6, height: 8.2
 export const BOOST = Object.freeze({ duration: 2.5, cooldown: 6, speed: 12.5, refill: 1.2 });
 // Speed mode (player only): double-tap the flight direction or press E. Faster flight for a while, then a long recharge.
 export const TURBO = Object.freeze({ duration: 5, cooldown: 20, factor: 1.45 });
+// A flower whose nectar nobody fetches for `after` seconds wilts (`fade`), stays bare, and a new one
+// grows back (`regrow` in all, the last `grow` seconds visibly sprouting) with fresh nectar.
+export const WILT = Object.freeze({ after: 30, fade: 2.5, regrow: 6, grow: 2 });
 // Scouts differ a little in pace (±12 %); in rare 6-second spells one gets a burst of zeal or turns lazy.
 export const PACE = Object.freeze({ spread: 0.12, window: 6, rare: 0.07, fast: 1.3, slow: 0.72 });
 const fract = x => x - Math.floor(x);
@@ -44,7 +47,7 @@ export class Game {
     this.remaining = RULES.duration;
     this.honey = 0;
     this.result = null;
-    this.cooldowns = FLOWERS.map(() => 0);
+    this.cooldowns = FLOWERS.map(() => 0); this.wilt = FLOWERS.map(() => 0); this.unvisited = FLOWERS.map(() => 0);
     this.lastWinners = [];
     this.events = [];
     this.bumble = null;
@@ -107,6 +110,14 @@ export class Game {
     if (this.result) { if (this.celebration) this.celebrate(dt); return; }
     this.clock += dt;
     this.cooldowns = this.cooldowns.map(c => Math.max(0, c - dt));
+    if (!this.cutscene) for (const f of FLOWERS) {
+      const i = f.id;
+      if (this.wilt[i]) { this.wilt[i] = Math.max(0, this.wilt[i] - dt); if (!this.wilt[i]) { this.unvisited[i] = 0; this.emit({ type: 'sprout', flower: i, x: f.x, y: f.height, z: f.z }); } continue; }
+      if (this.cooldowns[i]) { this.unvisited[i] = 0; continue; }
+      this.unvisited[i] += dt;
+      // A per-flower offset (0-12 s), so flowers never wilt all at once.
+      if (this.unvisited[i] > WILT.after + (i * 7.3) % 12) { this.wilt[i] = this.cooldowns[i] = WILT.fade + WILT.regrow; this.emit({ type: 'wilt', flower: i, x: f.x, y: f.height, z: f.z }); }
+    }
     for (const [key, value] of this.pairs) if (value <= dt) this.pairs.delete(key); else this.pairs.set(key, value - dt);
     for (const [owner, state] of this.toppled) { state.time -= dt; if (state.time <= 0) { this.toppled.delete(owner); this.emit({ type: 'restore', owner, kind: state.kind, x: state.x, y: 1.2, z: state.z }); } }
     tickBumblebee(this, dt);
@@ -325,7 +336,7 @@ export class Game {
     if (this.bumble) { this.bumble = null; this.emit({ type: 'bumble-leave' }); }
   }
   reset() {
-    this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.celebration = null; this.cooldowns.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
+    this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.celebration = null; this.cooldowns.fill(0); this.wilt.fill(0); this.unvisited.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
     scheduleBumblebee(this, RULES.goal);
     for (const p of this.players.values()) {
       Object.assign(p, home(p.id), { score: 0, points: 0, bag: 0, boost: 0, power: 0, powered: false, wet: 0, shake: 0, bumpLog: [], turbo: 0, turboWait: 0, kx: 0, ky: 0, kz: 0, vx: 0, vy: 0, vz: 0, stun: 0, angry: 0, fume: 0 });

@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { Game, RULES, BOOST, TURBO, HEIST, POWER, SHOVE, LOAD, RAIN, loadFactor } from './simulation.js';
+import { Game, RULES, BOOST, TURBO, WILT, HEIST, POWER, SHOVE, LOAD, RAIN, loadFactor } from './simulation.js';
 import { createRainCloud, createBoostRings } from './features/weather.js';
 import { createStream, streamDistance, STREAM, STREAM_INFO, STREAM_Y } from './features/stream.js';
 import { createPowerAura } from './features/power-aura.js';
 import { createShellFur } from './features/shell-fur.js';
 import { createHoneyGauge } from './features/honey-gauge.js';
 import { releaseBumblebee } from './features/bumblebee.js';
-import { WORLD, FLOWERS, TREES } from './world.js';
+import { WORLD, FLOWERS, TREES, BUSHES } from './world.js';
 import { markup } from './ui.js';
 import { GARDEN_PALETTE as palette } from './palette.js';
 import { OrbitView, bindOrbitControls } from './features/orbit-view.js';
@@ -268,6 +268,14 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       }
     }
   }
+  // Bushes: four leafy blobs each, all in one instanced mesh (one draw call).
+  const bushBlobs = new THREE.InstancedMesh(sphere, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85 }), BUSHES.length * 4);
+  BUSHES.forEach((b, n) => [[0, 0.42, 0, 0.62], [0.42, 0.32, 0.12, 0.46], [-0.36, 0.3, -0.1, 0.48], [0.05, 0.62, -0.18, 0.4]].forEach(([x, y, z, r], k) => {
+    const turn = b.id * 1.7, s = b.size;
+    dummy.position.set(b.x + (x * Math.cos(turn) - z * Math.sin(turn)) * s, y * s, b.z + (x * Math.sin(turn) + z * Math.cos(turn)) * s); dummy.rotation.set(0, 0, 0); dummy.scale.set(r * s * 1.15, r * s * 0.95, r * s * 1.15); dummy.updateMatrix();
+    bushBlobs.setMatrixAt(n * 4 + k, dummy.matrix); bushBlobs.setColorAt(n * 4 + k, new THREE.Color(palette.foliage[(b.id + k * 2) % palette.foliage.length]).multiplyScalar(0.82 + k * 0.06));
+  }));
+  bushBlobs.castShadow = bushBlobs.receiveShadow = true; scene.add(bushBlobs);
   let hiveBeacon = 0;
   const pivots = new Map();
   const flowerModels = FLOWERS.map(f => {
@@ -344,11 +352,12 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     // The player's altitude line connects the bee to its shadow for depth in the garden view.
     const stem = p.bot ? null : new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, -1, 0)]), new THREE.LineDashedMaterial({ color: '#ffe49c', dashSize: 0.18, gapSize: 0.14, transparent: true, opacity: 0.7 }));
     if (stem) { stem.computeLineDistances(); scene.add(stem); }
-    const labelCanvas = document.createElement('canvas'); labelCanvas.width = 256; labelCanvas.height = 64;
-    const ctx = labelCanvas.getContext('2d'); ctx.font = `600 ${p.bot ? 23 : 27}px monospace`; ctx.textAlign = 'center'; ctx.fillStyle = p.bot ? '#f0e9ff' : '#fff8df';
-    if (!p.bot) { ctx.fillStyle = '#242b45'; ctx.beginPath(); ctx.roundRect(50, 6, 156, 48, 4); ctx.fill(); ctx.fillStyle = '#ffe49c'; }
-    ctx.fillText(p.bot ? p.name : 'YOU', 128, 39);
-    const labelTexture = new THREE.CanvasTexture(labelCanvas); const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture, depthTest: false })); label.position.y = 1.1; label.scale.set(2.5, 0.625, 1); group.add(label);
+    const labelCanvas = document.createElement('canvas'); labelCanvas.width = p.bot ? 256 : 128; labelCanvas.height = p.bot ? 64 : 128;
+    const ctx = labelCanvas.getContext('2d'); ctx.font = `${p.bot ? '600 23px' : '700 38px'} monospace`; ctx.textAlign = 'center'; ctx.fillStyle = p.bot ? '#f0e9ff' : '#fff8df';
+    // The player's badge: a round disc in the deep sky blue, with a light rim, for strong contrast on the meadow.
+    if (!p.bot) { ctx.beginPath(); ctx.roundRect(4, 4, 120, 120, 60); ctx.fillStyle = '#cfe4ff'; ctx.fill(); ctx.beginPath(); ctx.roundRect(11, 11, 106, 106, 53); ctx.fillStyle = '#1b4c8c'; ctx.fill(); ctx.fillStyle = '#ffffff'; }
+    if (p.bot) ctx.fillText(p.name, 128, 39); else ctx.fillText('YOU', 64, 77);
+    const labelTexture = new THREE.CanvasTexture(labelCanvas); const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture, depthTest: false })); label.position.y = p.bot ? 1.1 : 1.25; if (p.bot) label.scale.set(2.5, 0.625, 1); else label.scale.set(0.95, 0.95, 1); group.add(label);
     const stars = createDizzyStars(); stars.group.position.y = 0.55; stars.group.visible = false; group.add(stars.group);
     const aura = p.bot ? null : createPowerAura(); if (aura) { body.add(aura.outline); group.add(aura.halo); }
     group.position.set(p.x, p.y, p.z);
@@ -499,6 +508,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (event.type === 'round-end') { alertTime = 0; $('bumble-alert').hidden = true; endCinematic(); }
       if (started && event.type === 'round-end' && event.result === 'complete') { toast('🍯 Goal reached! The hive overflows with honey!'); audio.play('deliver', null, { rate: 0.85 }); }
       if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = 6;
+      if (event.type === 'wilt') burst.emit(probe.set(event.x, event.y, event.z), { color: '#a08a4a', count: 12, speed: 1.2, gravity: -3, size: 0.1, life: 1.2 });
+      if (event.type === 'sprout') burst.emit(probe.set(event.x, 0.4, event.z), { color: '#9bd36a', count: 16, speed: 2.2, gravity: -5, size: 0.09 });
       if (event.type === 'topple') burst.emit(probe.set(event.x, event.y, event.z), { color: event.kind === 'tree' ? '#7fae5c' : '#f2a5c0', count: 22, speed: 3.4, gravity: -4, size: 0.14 });
       if (event.type === 'restore') burst.emit(probe.set(event.x, 0.6, event.z), { color: '#fff3b0', count: 10, speed: 1.6, gravity: 0, life: 0.5 });
       if (event.type === 'bumble-shoved') { burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffd23f', count: 30, speed: 5.5, gravity: -1, life: 0.8 }); if (player && event.id === player.id) beeView.bump(0.6); }
@@ -531,6 +542,14 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   }
   // Start of play: zoom in on the player's bee and make it glow for a moment, then ease back out.
   const SPOTLIGHT = 3.5, spotEye = new THREE.Vector3(), spotAim = new THREE.Vector3();
+  // A neglected flower droops and sinks away, then a new one sprouts with a little overshoot.
+  function wiltPose(g, w) {
+    if (!w) { if (g.userData.wilted) { g.scale.setScalar(1); g.rotation.z = 0; g.visible = true; g.userData.wilted = false; } return; }
+    g.userData.wilted = true;
+    if (w > WILT.regrow) { const t = 1 - (w - WILT.regrow) / WILT.fade; g.visible = true; g.rotation.z = 0.9 * t * t; g.scale.set(1 - 0.3 * t, Math.max(0.05, 1 - 0.95 * t), 1 - 0.3 * t); }
+    else if (w > WILT.grow) g.visible = false;
+    else { const t = 1 - w / WILT.grow; g.visible = true; g.rotation.z = 0; g.scale.setScalar(Math.max(0.02, t < 0.8 ? t / 0.8 * 1.08 : 1.08 - (t - 0.8) / 0.2 * 0.08)); }
+  }
   let strafe = 0, spotlight = 0;
   function update(dt, elapsed) {
     if (!active) return;
@@ -562,6 +581,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       // Shaking itself dry after the rain: a fast, fading wiggle.
       if (p.shake) bee.body.rotation.z = Math.sin(elapsed * 55) * 0.55 * (p.shake / RAIN.shake);
       bee.group.visible = !(own && view === 'bee' && !game.celebration); // Name tags of bees right in front of the camera would cover the view (tour close-ups, bee view).
+      if (own) bee.label.material.opacity = started ? 0.8 : 1; // slightly see-through during play
       const near = camera.position.distanceTo(bee.group.position); bee.label.visible = cinematic.active ? false : !started ? near > 11 : (view !== 'bee' && !spotlight) || near > 6;
       bee.fuzz.userData.setLayers(fuzzLayers(near));
       if (bee.stem) { bee.stem.visible = view === 'orbit' && started; bee.stem.position.copy(bee.group.position); bee.stem.scale.y = Math.max(0.01, bee.group.position.y - 0.1); }
@@ -582,7 +602,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     } else bumble.seen = false;
     bumble.fur.userData.setLayers(bumbleLayers(camera.position.distanceTo(bumble.group.position)));
     if (!started) tourFrame(dt, elapsed);
-    flowerModels.forEach(({ flower, drop }, i) => { flower.update(elapsed); drop.update(dt, elapsed, !game.cooldowns[i]); });
+    flowerModels.forEach(({ flower, drop }, i) => { flower.update(elapsed); drop.update(dt, elapsed, !game.cooldowns[i]); wiltPose(flower.group, game.wilt[i]); });
     // Toppled trees and flowers fall over, lie a moment with a small bounce, and stand up again.
     for (const [owner, pivot] of pivots) {
       const state = game.toppled.get(owner);

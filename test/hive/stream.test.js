@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { STREAM, STREAM_INFO, STREAM_RULES, STREAM_Y, streamClearance, streamDistance, createStream } from '../../src/games/hive/features/stream.js';
-import { WORLD, FLOWERS, TREES } from '../../src/games/hive/world.js';
+import { WORLD, FLOWERS, TREES, BUSHES } from '../../src/games/hive/world.js';
 
 // Plain Node: no document, no canvas. The brook builds with DataTextures only.
 const triangles = object => { let total = 0; object.traverse(node => { const g = node.geometry; if (g) total += (g.index ? g.index.count : g.attributes.position.count) / 3 * (node.isInstancedMesh ? node.count : 1); }); return total; };
@@ -124,4 +124,8 @@ test('the module is deterministic: two streams are identical', () => {
   const pa = named(a.group, 'stream-brook').geometry.attributes.position.array, pb = named(b.group, 'stream-brook').geometry.attributes.position.array;
   assert.deepEqual(Array.from(pa), Array.from(pb));
   a.dispose(); b.dispose();
+});
+
+test('the brook routes around the bushes', () => {
+  for (const b of BUSHES) assert.ok(streamDistance(b.x, b.z) > b.size, `bush ${b.id} stands ${streamDistance(b.x, b.z).toFixed(2)} from the water`);
 });

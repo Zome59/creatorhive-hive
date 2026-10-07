@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, BOOST, TURBO, PACE, scoutPace, FLOWERS, HEIST, RULES } from '../../src/games/hive/simulation.js';
-import { WORLD, OBSTACLES, contact } from '../../src/games/hive/world.js';
+import { Game, BOOST, TURBO, WILT, PACE, scoutPace, FLOWERS, HEIST, RULES } from '../../src/games/hive/simulation.js';
+import { WORLD, OBSTACLES, BUSHES, TREES, contact } from '../../src/games/hive/world.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 const events = (game, type) => game.events.filter(e => e.type === type);
@@ -309,4 +309,24 @@ test('scouts fly at slightly different paces, with rare fast or lazy spells', ()
   assert.ok(typical.every(v => v > 0.87 && v < 1.13), 'within ±12 %');
   const spells = bases.flat(), fast = spells.filter(r => r.mood === 'fast').length / spells.length, slow = spells.filter(r => r.mood === 'slow').length / spells.length;
   assert.ok(fast > 0.03 && fast < 0.12 && slow > 0.03 && slow < 0.12, `rare spells (fast ${fast.toFixed(3)}, slow ${slow.toFixed(3)})`);
+});
+test('a flower nobody visits wilts, stays bare a moment, and sprouts again with fresh nectar', () => {
+  const game = new Game({ bots: 0 }), bee = game.addPlayer(); Object.assign(bee, { x: 0, y: 7, z: 26 });
+  const seen = [], flower = FLOWERS[0];
+  for (let t = 0; t < WILT.after + 0.5; t += 0.1) { game.setInput(bee.id, {}); game.tick(0.1); seen.push(...game.events); } // flower 0 has no extra offset
+  assert.ok(seen.some(e => e.type === 'wilt' && e.flower === flower.id), 'wilted');
+  assert.ok(game.cooldowns[flower.id] > 0 && game.wilt[flower.id] > 0, 'no nectar while wilted');
+  for (let t = 0; t < WILT.fade + WILT.regrow + 0.2; t += 0.1) { game.tick(0.1); seen.push(...game.events); }
+  assert.ok(seen.some(e => e.type === 'sprout' && e.flower === flower.id), 'sprouted');
+  assert.equal(game.cooldowns[flower.id], 0); assert.equal(game.wilt[flower.id], 0);
+});
+test('bushes, trees, and flowers vary in height; bushes stand clear of flowers and trees', () => {
+  assert.ok(BUSHES.length >= 10, `${BUSHES.length} bushes`);
+  for (const b of BUSHES) {
+    assert.ok(FLOWERS.every(f => Math.hypot(f.x - b.x, f.z - b.z) >= 2.3) && TREES.every(t => Math.hypot(t.x - b.x, t.z - b.z) >= 2.8));
+    assert.ok(Math.hypot(b.x, b.z) > WORLD.hive.radius + 3);
+  }
+  const span = list => Math.max(...list) - Math.min(...list);
+  assert.ok(span(TREES.filter(t => t.inside).map(t => t.height)) > 1.6, 'inside trees differ clearly in height');
+  for (const tier of [0, 1, 2]) assert.ok(span(FLOWERS.filter(f => f.id % 3 === tier).map(f => f.height)) > 0.4, `tier ${tier} varies`);
 });

@@ -108,9 +108,13 @@ A large **controls panel**, by default hanging half over the left edge of the ga
 
 Touch devices show directional, climb/sink, boost, and speed buttons; drag the garden to rotate the view (or to look in bee view). Nectar collects automatically when you fly close to a honey drop; drops grow on low meadow flowers, mid-height flowers, and tall sunflowers, so altitude matters. Your bag holds eight drops. Fly into the center hive's glowing ring to deliver. Scouts are AI, visibly labeled throughout the interface. They fly at slightly different paces (±12 %), and now and then one gets a short burst of zeal (“Wheee!”) or a lazy spell (“Yawn…”). Leaving the window pauses active play.
 
-### Brook, waterfall, and stones
+### Brook, waterfall, stones, and bushes
 
-A small brook springs up in a pond in the meadow, meanders between the flowers to the island's rim, and pours over the edge as a waterfall that fades into mist far below. Pebbles line its banks and lie in its bed, and small stones are scattered across the meadow. You hear the brook from wherever it is closest to your bee, and the waterfall roars a little deeper near the rim.
+A small brook springs up in a pond in the meadow, meanders between the flowers to the island's rim, and pours over the edge as a waterfall that fades into mist far below. Pebbles line its banks and lie in its bed, and small stones are scattered across the meadow. Low round bushes dot the field (solid, so fly over them), and trees and flowers differ in height, from small to tall. You hear the brook from wherever it is closest to your bee, and the waterfall roars a little deeper near the rim.
+
+### Wilting flowers
+
+A flower whose honey drop nobody fetches for about 30 to 40 seconds wilts: it droops, sinks to the ground, and its drop disappears. A few seconds later a new flower sprouts in its place, with a fresh drop.
 
 ### Honey in the hive
 
