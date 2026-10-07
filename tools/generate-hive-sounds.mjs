@@ -45,8 +45,8 @@ export const RECIPES = {
   // Background music: generated once, cut to a seamless loop, stereo, played quietly on the music channel.
   'music-synthwave': { model: MUSIC, seed: 301, settings: INSTRUMENTAL, music: { from: 6, length: 70 }, prompt: 'Warm, mellow instrumental synthwave for a cozy video game set in a sunny flower garden full of bees: steady relaxed groove around 100 BPM, soft gated drums, round analog bass, shimmering arpeggiated synths, dreamy pads, retro 1980s feel, positive and laid back, consistent energy without breaks or big drops, no vocals.' },
   // Pure nature, no instruments: a summer meadow mixed locally from short field-recording-style layers.
-  'music-meadow': { scape: { length: 80, bed: [401, 402, 403, 404], birds: [411, 412, 413, 414], brook: [421, 422] } },
-  'meadow-bed': { duration: 10, prompt: 'Peaceful summer meadow ambience: a very soft warm breeze through tall grass, faint distant crickets and grasshoppers, calm and continuous, natural field recording, no birds, no water, no music, no voices.' },
+  'music-meadow': { scape: { length: 80, bed: [405, 406, 407, 408], birds: [411, 412, 413, 414], brook: [421, 422] } },
+  'meadow-bed': { duration: 10, prompt: 'Peaceful summer meadow ambience: only a very soft warm breeze through tall grass and leaves, gentle rustling, calm and continuous, natural field recording, no insects, no crickets, no grasshoppers, no birds, no water, no music, no voices.' },
   'meadow-birds': { duration: 10, prompt: 'A few summer songbirds chirping and singing in a meadow nearby, short cheerful phrases with quiet pauses in between, natural field recording, soft breeze, no music, no voices.' },
   'meadow-brook': { duration: 10, prompt: 'A small gentle brook babbling over pebbles in a meadow, soft continuous trickling water, calm natural field recording, no birds, no music, no voices.' },
   dizzy: { seed: 145, duration: 2, max: 1.4, prompt: 'Cartoon dizzy sound effect: little twittering chirps and twinkling sparkles circling the head of a stunned character, whimsical and short, about one second, then complete silence, isolated, no music, no speech.' },
@@ -186,8 +186,10 @@ function encode(name, samples, channels = 1) {
 // and a few short bird phrases placed left and right. Built a little longer than the loop, then crossfaded.
 function soundscape({ length, bed, birds, brook }) {
   const clip = (name, seed) => decode(resolve(cache, `${name}-${seed}.wav`));
+  // Three one-pole low-passes (about 1.5 kHz) keep the grass bed a soft, dark breeze: no high chirps.
+  const soften = x => { for (let pass = 0; pass < 3; pass++) { let y = x[0]; for (let i = 0; i < x.length; i++) { y += (x[i] - y) * 0.2; x[i] = y; } } return x; };
   const size = Math.round((length + 3) * RATE), out = new Float32Array(size * 2), fade = Math.round(2 * RATE);
-  const bedClips = bed.map(seed => clip('meadow-bed', seed)), bedLevel = 10 ** (-26 / 20);
+  const bedClips = bed.map(seed => soften(clip('meadow-bed', seed))), bedLevel = 10 ** (-26 / 20);
   let at = 0, k = 0;
   while (at < size) {
     const c = bedClips[[0, 1, 2, 3, 2, 0, 3, 1][k++ % 8] % bedClips.length], scale = bedLevel / Math.max(1e-6, rms(c));
