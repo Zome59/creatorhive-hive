@@ -2,6 +2,20 @@
 
 Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 450 nectar in four minutes (with the final-boss wasp; switch it off under **⚙ Game settings** for 400 nectar in three and a half minutes). Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
 
+**Play online:** https://zome59.github.io/creatorhive-hive/ · **Screenshots:** [docs/screenshots](docs/screenshots/README.md)
+
+## What's new in this fork
+
+Everything below is described in detail further down, in the in-game **Full guide** (now with pictures), and in the commit messages.
+
+- **Sound:** a positioned buzz for every bee, fly-bys, bumps, the bumblebee and the wasp; a meadow ambience with occasional songbirds; the brook and waterfall on their own mixer channel; a sound mixer; the landing screen plays quietly from the first click ([Sound](#sound), [audio sources](public/games/hive/audio/README.md)).
+- **Bumblebee:** an entrance cutscene, knocking bees over, and its honey raid on the hive ([Bumps, bubbles, and the bumblebee](#bumps-bubbles-and-the-bumblebee)).
+- **Final boss wasp:** climbs over the island, hunts scouts, swarm commands, butt slams with hit flash and HP, HIVE DEFENDED or WASTED ([The wasp](#the-wasp-final-boss)).
+- **Bee tokens:** five helper bees, or defenders during the wasp fight; a short camera ride shows where a token appears ([Bee tokens](#bee-tokens)).
+- **Demo:** ▶ Watch the demo plays about a minute and a half of everything by itself ([Demo](#demo)).
+- **More:** speed mode, rain cloud after too many bumps, wilting flowers, brook and waterfall, bushes, start flight around the island, readable messages, round modes with or without the boss.
+- **Hosting:** works from a subfolder too (see [GitHub Pages](#github-pages)).
+
 ## Run locally
 
 Requires Node.js 22.12+ and npm.
@@ -11,7 +25,7 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**. Click **▶**, anywhere in the garden, or press **Enter** to begin. The landing screen plays a short guided tour of the live garden: camera shots, including a moment in bee view, with captions explaining how to play. It ends on **“Let’s go!”** with a pulsing play button and then loops. The garden is audible quietly from your first click or key press (browsers need a gesture before playing sound) and fades up to full volume when the round starts. **ⓘ Full guide** in the caption, or **?** in the HUD during play (which pauses), opens the complete game guide.
+Open **http://127.0.0.1:5173**. Click **▶**, anywhere in the garden, or press **Enter** to begin. The landing screen plays a short guided tour of the live garden: camera shots, including a moment in bee view, with captions explaining how to play. It ends on **“Let’s go!”** with a pulsing play button and then loops. The garden is audible quietly from your first click or key press (browsers need a gesture before playing sound) and fades up to full volume when the round starts. **ⓘ Full guide** in the caption, or **?** in the HUD during play (which pauses), opens the complete game guide, with screenshots of the bumblebee, the wasp fight, bee tokens and more.
 
 The interface uses a minimal dark terminal theme: gameplay fills the page, the objective and timer sit inside the game, and a compact controls strip stays beneath it. Use the **Honey Retrieval** and **Worker Bee Sim** buttons to switch games; the inactive mode stops updating and its UI is removed from the page until you return.
 
@@ -63,6 +77,16 @@ npm start
 ```
 
 `npm start` previews the production build at **http://127.0.0.1:4173**. Both servers bind to loopback by default. Nothing is deployed or published by these commands.
+
+## GitHub Pages
+
+The site also runs from a subfolder. Build with the folder as base path and publish `dist/` (for example on a `gh-pages` branch):
+
+```sh
+npx vite build --base=/creatorhive-hive/
+```
+
+Sounds, guide pictures and the monitor videos load relative to that base path.
 
 ## Cloudflare hosting
 
