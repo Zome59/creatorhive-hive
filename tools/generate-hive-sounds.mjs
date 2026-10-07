@@ -27,8 +27,8 @@ export const RECIPES = {
   // AI buzz clips are noisy; a clean synthesized wingbeat tone carries the bzzzz, the clip adds a hint of texture.
   buzz: { seed: 21, duration: 4, loop: { from: 0.6, length: 2.4 }, tone: { f0: 228, tilt: 0.85, drift: 0.015, flutter: 0.006, tremolo: 0.1, texture: 0.12 }, prompt: 'Seamless steady close-up honeybee wing buzz hovering in place right in front of the microphone, continuous mid-pitched bzzzz hum around 230 Hz, warm, rounded and friendly, constant loudness and pitch for the whole duration, no pauses, dry studio recording, isolated, no background ambience, no music, no speech.' },
   bumble: { seed: 31, duration: 5, loop: { from: 0.8, length: 3.2 }, tone: { f0: 118, tilt: 1.05, drift: 0.03, flutter: 0.01, tremolo: 0.16, texture: 0.1 }, prompt: 'Seamless steady close-up big fuzzy bumblebee hovering, deep heavy low droning wing hum around 120 Hz with a lazy slight wobble, warm and round, constant loudness for the whole duration, no pauses, dry studio recording, isolated, no background ambience, no music, no speech.' },
-  // Two steep high-passes take out the deep rumble the clip carried below ~200 Hz.
-  garden: { seed: 44, duration: 10, loop: { from: 1, length: 7 }, filter: 'highpass=f=220:poles=2,highpass=f=220:poles=2', prompt: 'Very quiet, calm outdoor meadow room tone: a soft, gentle breeze and light rustling of grass, nothing else, no birds, no insects, no animals, no water, even and continuous, no music, no speech.' },
+  // One gentle high-pass takes out the deep rumble the clip carried; steeper ones made the breeze sound thin.
+  garden: { seed: 44, duration: 10, loop: { from: 1, length: 7 }, filter: 'highpass=f=140:poles=2', prompt: 'Very quiet, calm outdoor meadow room tone: a soft, gentle breeze and light rustling of grass, nothing else, no birds, no insects, no animals, no water, even and continuous, no music, no speech.' },
   // The fly-by is derived from the buzz: a Doppler pitch glide and a swell, so it matches the bees exactly.
   pass: { from: 'buzz', flyby: { length: 1.25, peak: 0.42 } }, // uses the finished buzz loop
   bump: { seed: 61, duration: 2, max: 0.8, prompt: 'Cartoon collision sound effect: two small, soft, round fuzzy insects bump into each other in mid-air, one short comedic rubbery boink bounce with a tiny squeak, very short and punchy, playful, then complete silence, isolated, no music, no speech.' },
@@ -44,12 +44,14 @@ export const RECIPES = {
   alarm: { from: 'bumble', chime: { notes: [[0, 698.46], [0.2, 587.33], [0.66, 698.46], [0.86, 587.33]], length: 1.8 } },
   slurp: { seed: 155, duration: 3, max: 1.3, prompt: 'Comedic cartoon slurping sound: a big fuzzy character greedily sucks thick honey through a tiny straw, one wet gurgling slurp with a happy little gulp at the end, about one second, then complete silence, isolated, no music, no speech.' },
   // Background music: generated once, cut to a seamless loop, stereo, played quietly on the music channel.
-  'music-synthwave': { model: MUSIC, seed: 301, settings: INSTRUMENTAL, music: { from: 6, length: 70 }, prompt: 'Warm, mellow instrumental synthwave for a cozy video game set in a sunny flower garden full of bees: steady relaxed groove around 100 BPM, soft gated drums, round analog bass, shimmering arpeggiated synths, dreamy pads, retro 1980s feel, positive and laid back, consistent energy without breaks or big drops, no vocals.' },
+  'music-synthwave': { model: MUSIC, seed: 301, settings: INSTRUMENTAL, music: { from: 6, length: 70 }, bitrate: '128k', prompt: 'Warm, mellow instrumental synthwave for a cozy video game set in a sunny flower garden full of bees: steady relaxed groove around 100 BPM, soft gated drums, round analog bass, shimmering arpeggiated synths, dreamy pads, retro 1980s feel, positive and laid back, consistent energy without breaks or big drops, no vocals.' },
   // Pure nature, no instruments: a summer meadow mixed locally from short field-recording-style layers.
-  // No birds (they sounded like gulls in the mix): bed clips 405, 407 and 408 carried chirps too, so only 406 (played forwards and backwards).
+  // Bed clips 405, 407 and 408 carried chirps, so the bed is only 406 (played forwards and backwards).
   // Instead of a dull low-pass, the filter cuts only the narrow insect tone around 5 kHz and tames the hiss above 6 kHz,
-  // so the breeze keeps its air; a high-pass keeps it free of low rumble.
-  'music-meadow': { scape: { length: 80, bed: [406], brook: [421, 422] }, bitrate: '128k', filter: 'highpass=f=160:poles=2,equalizer=f=4950:t=q:w=2.2:g=-15,equalizer=f=4500:t=q:w=4:g=-5,equalizer=f=5600:t=q:w=4:g=-5,highshelf=f=3500:g=-5,equalizer=f=7600:t=q:w=1.4:g=-8,lowpass=f=10000,volume=11.5dB' },
+  // so the breeze keeps its air; a high-pass keeps it free of low rumble. The filter shapes the bed and the brook only:
+  // the occasional songbirds (411, 414: light chirps, no harsh trills) are mixed in afterwards, unfiltered, because the
+  // cuts around 5 kHz bent their chirps into gull-like calls. 192 kbit/s keeps the breeze free of MP3 swirl.
+  'music-meadow': { scape: { length: 80, bed: [406], brook: [421, 422], birds: [411, 414] }, bitrate: '192k', filter: 'highpass=f=160:poles=2,equalizer=f=4950:t=q:w=2.2:g=-15,equalizer=f=4500:t=q:w=4:g=-5,equalizer=f=5600:t=q:w=4:g=-5,highshelf=f=3500:g=-5,equalizer=f=7600:t=q:w=1.4:g=-8,lowpass=f=10000,volume=11.5dB' },
   'meadow-bed': { duration: 10, prompt: 'Peaceful summer meadow ambience: only a very soft warm breeze through tall grass and leaves, gentle rustling, calm and continuous, natural field recording, no insects, no crickets, no grasshoppers, no birds, no water, no music, no voices.' },
   'meadow-birds': { duration: 10, prompt: 'A few summer songbirds chirping and singing in a meadow nearby, short cheerful phrases with quiet pauses in between, natural field recording, soft breeze, no music, no voices.' },
   'meadow-brook': { duration: 10, prompt: 'A small gentle brook babbling over pebbles in a meadow, soft continuous trickling water, calm natural field recording, no birds, no music, no voices.' },
@@ -197,7 +199,7 @@ function encode(name, samples, channels = 1, filter = null, bitrate = '64k') {
 }
 // Summer meadow: a grass-and-crickets bed chained from several clips, a brook that drifts in and out,
 // and optionally a few short bird phrases placed left and right. Built a little longer than the loop, then crossfaded.
-function soundscape({ length, bed, birds = [], brook }) {
+function soundscape({ length, bed, birds = [], brook }, filter = null) {
   const clip = (name, seed) => decode(resolve(cache, `${name}-${seed}.wav`));
   const size = Math.round((length + 3) * RATE), out = new Float32Array(size * 2), fade = Math.round(2 * RATE);
   // Each bed clip also plays reversed: a breeze sounds the same backwards and the chain repeats less.
@@ -211,23 +213,39 @@ function soundscape({ length, bed, birds = [], brook }) {
     }
     at += c.length - fade;
   }
-  const brookClips = brook.map(seed => clip('meadow-brook', seed)), brookLevel = 10 ** (-37 / 20), brookRms = brookClips.map(c => Math.max(1e-6, rms(c)));
+  // The brook in the mix is only a faint far-off trickle; the real one in the garden has its own positioned sound.
+  const brookClips = brook.map(seed => clip('meadow-brook', seed)), brookLevel = 10 ** (-47 / 20), brookRms = brookClips.map(c => Math.max(1e-6, rms(c)));
   for (let i = 0; i < size; i++) {
     const t = i / RATE, swell = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 16) / 34)))) ** 1.5; // audible from about 16 s to 50 s
     if (!swell) continue;
     const n = Math.floor(i / (8 * RATE)) % brookClips.length, c = brookClips[n], v = c[i % c.length] / brookRms[n] * brookLevel * swell;
     out[i * 2] += v * 0.8; out[i * 2 + 1] += v * 0.55;
   }
-  // Birds only now and then: four short phrases, alternating left and right.
-  const birdClips = birds.map(seed => clip('meadow-birds', seed)), birdLevel = 10 ** (-35 / 20), phrase = Math.round(4.5 * RATE), skip = Math.round(0.5 * RATE);
+  const mix = loopStereo(out, { from: 0, length }), shaped = filter ? filtered(mix, 2, filter) : mix;
+  // Birds only now and then: four short phrases, alternating left and right, unfiltered. Each phrase is the busiest
+  // 4.5 s of its clip, and its loudest chirp peaks about 18 dB over the bed's average level: clearly there, never piercing.
+  // The bird clips carry their own wind below 1.5 kHz; only the chirps above it are used.
+  const birdClips = birds.map(seed => filtered(clip('meadow-birds', seed), 1, 'highpass=f=1500:poles=2,highpass=f=1500:poles=2')), chirpPeak = rms(shaped) * 10 ** (18 / 20), phrase = Math.round(4.5 * RATE);
+  const busiest = c => { let best = 0, most = -1; for (let at = 0; at + phrase <= c.length; at += Math.round(RATE / 4)) { let e = 0; for (let i = at + 1; i < at + phrase; i++) e += (c[i] - c[i - 1]) ** 2; if (e > most) { most = e; best = at; } } return c.subarray(best, best + phrase); };
   if (birdClips.length) [[6, -0.5], [26, 0.45], [47, -0.25], [66, 0.5]].forEach(([start, pan], n) => {
-    const c = birdClips[n % birdClips.length], part = c.subarray(skip, skip + phrase), scale = birdLevel / Math.max(1e-6, rms(part)), from = Math.round(start * RATE), soft = Math.round(0.6 * RATE);
-    for (let i = 0; i < part.length && from + i < size; i++) {
+    const part = busiest(birdClips[n % birdClips.length]), from = Math.round(start * RATE), soft = Math.round(0.6 * RATE);
+    let top = 0; for (const x of part) top = Math.max(top, Math.abs(x));
+    const scale = chirpPeak / Math.max(1e-6, top);
+    for (let i = 0; i < part.length && (from + i) * 2 + 1 < shaped.length; i++) {
       const w = Math.min(1, i / soft, (part.length - i) / soft) * part[i] * scale;
-      out[(from + i) * 2] += w * (1 - Math.max(0, pan)); out[(from + i) * 2 + 1] += w * (1 + Math.min(0, pan));
+      shaped[(from + i) * 2] += w * (1 - Math.max(0, pan)); shaped[(from + i) * 2 + 1] += w * (1 + Math.min(0, pan));
     }
   });
-  return loopStereo(out, { from: 0, length });
+  let peak = 0; for (const x of shaped) peak = Math.max(peak, Math.abs(x));
+  return peak > 0.89 ? shaped.map(x => x * 0.89 / peak) : shaped;
+}
+// Runs an ffmpeg audio filter over interleaved samples in memory (same length out).
+function filtered(samples, channels, filter) {
+  const temp = resolve(cache, `filter-${process.pid}.f32`);
+  writeFileSync(temp, Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength));
+  const raw = execFileSync('ffmpeg', ['-v', 'error', '-f', 'f32le', '-ar', String(RATE), '-ac', String(channels), '-i', temp, '-af', filter, '-f', 'f32le', '-ar', String(RATE), '-ac', String(channels), '-'], { maxBuffer: 1 << 30 });
+  rmSync(temp);
+  return new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
 }
 function loopStereo(all, { from, length }) {
   const frames = all.length / 2, start = Math.round(from * RATE), size = Math.round(length * RATE), fade = Math.round(3 * RATE);
@@ -272,7 +290,7 @@ if (explore) {
   for (const name of names) {
     const recipe = RECIPES[name];
     if (recipe.from) { encode(name, recipe.chime ? level(chime(finished.get(recipe.from), recipe.chime), -17) : flyby(finished.get(recipe.from), recipe.flyby)); console.log(`${name}: derived from ${recipe.from}`); continue; }
-    if (recipe.scape) { encode(name, soundscape(recipe.scape), 2, recipe.filter, recipe.bitrate); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
+    if (recipe.scape) { encode(name, soundscape(recipe.scape, recipe.filter), 2, null, recipe.bitrate); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
     if (recipe.music) { encode(name, musicLoop(resolve(cache, `${name}-${recipe.seed}.wav`), recipe.music), 2, null, recipe.bitrate ?? '96k'); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
     let samples = decode(resolve(cache, `${recipe.clip ?? name}-${recipe.seed}.wav`), recipe.pitch);
     if (recipe.tone) {
@@ -281,7 +299,8 @@ if (explore) {
       recipe.loop = { from: 0, length };
     }
     const result = recipe.loop ? loop(samples, recipe.loop) : oneShot(samples, recipe.max);
-    finished.set(name, result); encode(name, result, 1, recipe.filter);
+    // Loops (breeze, water, rain, buzz) play for a long time: a higher bitrate keeps them free of MP3 swirl.
+    finished.set(name, result); encode(name, result, 1, recipe.filter, recipe.loop ? '128k' : '64k');
     console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`);
   }
 }

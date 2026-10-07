@@ -27,7 +27,7 @@ test('the side controls panel lists altitude keys, lights held keys, follows the
     assert.match(panel.textContent, /where you look/); assert.match(panel.textContent, /Garden view/);
     // Sound mixer: master plus channels, a reset button, and sliders that don't steer the bee.
     const sliders = [...panel.querySelectorAll('input[type="range"][data-bus]')];
-    assert.deepEqual(sliders.map(s => s.dataset.bus), ['master', 'bees', 'own', 'bumblebee', 'voices', 'effects', 'ambience', 'music']);
+    assert.deepEqual(sliders.map(s => s.dataset.bus), ['master', 'bees', 'own', 'bumblebee', 'voices', 'effects', 'ambience', 'brook', 'music']);
     assert.deepEqual([...panel.querySelectorAll('#music-track option')].map(o => o.textContent), ['Summer meadow', 'Synthwave', 'Off']);
     const effects = sliders.find(s => s.dataset.bus === 'effects');
     effects.value = '40'; effects.dispatchEvent(new browserWindow.Event('input'));

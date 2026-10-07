@@ -19,7 +19,8 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
       // One key per track, so switching tracks stops the previous one.
       if (music !== 'off') { keys.add(`music:${music}`); audio.loop(`music:${music}`, music, { spatial: false }); }
       for (const bee of game.players.values()) {
-        const key = `bee-${bee.id}`, own = bee === player, speed = Math.hypot(bee.vx, bee.vy, bee.vz);
+        // The heard-up-close bee has its own key, so another bee can take that role (landing tour) without a jump.
+        const own = bee === player, key = own ? 'own-buzz' : `bee-${bee.id}`, speed = Math.hypot(bee.vx, bee.vy, bee.vz);
         // Each bee keeps its own pitch; speed and boost raise it, a stunned bee wobbles.
         const pitch = 0.9 + (bee.id * 0.137 % 0.25) + Math.min(speed, 13) / 40 + (game.boosting(bee) ? 0.1 : 0) + (bee.stun ? Math.sin(bee.stun * 18) * 0.08 : 0);
         keys.add(key);

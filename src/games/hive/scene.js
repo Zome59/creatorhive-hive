@@ -50,7 +50,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   $('fullscreen').onclick = fullscreen;
   $('view').disabled = true;
   // The landing screen plays quietly from the first click or key press (browsers need a gesture for sound).
-  const INTRO_MIX = 0.35; // a light mix on the landing screen; the round start fades up to the full default
+  const INTRO_MIX = 0.5; // a light mix on the landing screen; the round start fades up to the full default
   // The landing screen plays the garden and its music quietly: right away if the browser allows it, otherwise
   // from the first click, key or touch. Starting the round fades everything up to the normal mix.
   let unlockClick = false; // the click that only switched the sound on (the browser had blocked it) does not start the round
@@ -207,6 +207,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (e.code === 'KeyH' && !e.repeat) { setPanel(!panelOpen); return; }
     if (e.code === 'Enter' && !started && !e.repeat && e.target === document.body) { $('start').click(); return; }
     if (cinematic.active && ['Enter', 'Escape', 'Space'].includes(e.code)) { e.preventDefault(); endCinematic(); return; }
+    if (tokenShot >= 0 && ['Enter', 'Escape'].includes(e.code)) { e.preventDefault(); endTokenShot(); return; }
     // During the start flight Enter/Esc jump to the close-up; a flight key ends it and you fly at once.
     if (flyover >= 0 && flyover < FLY.circle + FLY.swoop && ['Enter', 'Escape'].includes(e.code) && !e.repeat) { e.preventDefault(); skipFlyover(); return; }
     if (flyover >= 0 && flyover < FLY.circle + FLY.swoop + FLY.hold && FLIGHT_KEYS.has(e.code)) { flyover = FLY.circle + FLY.swoop + FLY.hold; game.cutscene = 0; }
@@ -593,7 +594,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       for (let i = 0; i < 4; i++) burst.emit(probe.set(Math.sin(i * 1.6) * 1.5, 2 + i * 0.5, Math.cos(i * 1.6) * 1.5), { color: '#f2a516', count: 40, speed: 6, gravity: -9, size: 0.2, life: 1.4 });
     }
     if (t === 'wasp-wasted') wastedT = 0;
-    if (t === 'bee-item') toast('🐝 A bee token appeared! Grab it for five extra bees.');
+    if (t === 'bee-item') { startTokenShot(event); toast('🐝 A bee token appeared! Grab it for five extra bees.'); }
     if (t === 'bee-item-collect') { burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffd84a', count: 26, speed: 3, gravity: -3 }); toast(game.wasp ? '🐝 Bee token! Press B to call 5 defender bees.' : '🐝 Bee token! Press B for 5 new bees now, or save it for the wasp.'); }
     if (t === 'bee-item-gone') toast('The bee token faded away.');
     if (t === 'bee-reinforce') {
@@ -870,11 +871,15 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
         camera.position.lerp(spotEye, ease); camera.lookAt(probe.copy(orbitTarget).lerp(spotAim, ease));
       }
     }
+    if (tokenShot >= 0) tokenShotCamera(dt);
     // The boss fight's camera shots blend over the garden or bee view (and ease back out afterwards).
     if ((started && game.wasp) || boss.directing) { camera.userData.baseFov = view === 'bee' ? beeView.fov : ORBIT_FOV; camera.getWorldDirection(bossLook); boss.camera(paused ? 0 : dt, camera, game, player, bossLook.multiplyScalar(12).add(camera.position)); }
-    if (!started && audio.enabled && !paused) { // landing screen: hear the garden from the tour camera
-      camera.getWorldDirection(probe);
-      soundscape.frame(game, null, dt, { listener: { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(probe.x, probe.z), pitch: Math.asin(Math.max(-1, Math.min(1, probe.y))) }, music, water: nearBrook(camera.position) });
+    if (!started && audio.enabled && !paused) {
+      // Landing screen: the ear sits where the tour camera looks (the hive, the chased scout), not at the camera
+      // far outside the island, so the bees and their bumps are heard and the waterfall at the rim stays distant.
+      // The scout the tour follows buzzes up close, like your own bee in play; the others fly past it.
+      const ear = reducedMotion ? orbitTarget : tourAim, featured = game.players.get(tourScout) ?? null; camera.getWorldDirection(probe);
+      soundscape.frame(game, featured, dt, { listener: { x: ear.x, y: ear.y, z: ear.z, yaw: Math.atan2(probe.x, probe.z), pitch: Math.asin(Math.max(-1, Math.min(1, probe.y))) }, music, water: nearBrook(ear) });
     }
     if (player && started) {
       const listener = cinematic.active ? { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(-camera.matrixWorld.elements[8], -camera.matrixWorld.elements[10]) } : view === 'bee' ? { x: player.x, y: player.y, z: player.z, yaw: beeView.yaw, pitch: beeView.pitch } : { x: player.x, y: player.y, z: player.z, yaw: orbit.azimuth + Math.PI };
@@ -894,6 +899,36 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     uiTime += dt; if (uiTime > 0.12) { updateUI(); uiTime = 0; }
   }
 
+  // A new bee token: the camera glides over to show where it floats, pushes in a little, eases back out and
+  // returns to your bee. The round clock waits meanwhile (a short cutscene); Enter, Esc or a click skips it.
+  const TOKEN_SHOT = Object.freeze({ to: 1.1, hold: 1.4, back: 1.1, far: 17, near: 13.5, elevation: 0.62, skip: 5 });
+  const TOKEN_SHOT_LENGTH = TOKEN_SHOT.to + TOKEN_SHOT.hold + TOKEN_SHOT.back;
+  const tokenAt = new THREE.Vector3(), shotEye = new THREE.Vector3(), shotLook = new THREE.Vector3(), baseLook = new THREE.Vector3();
+  let tokenShot = -1;
+  function startTokenShot(event) {
+    // Not over another cutscene, the start flight, the boss, or when the token is right beside your bee.
+    if (!started || !player || reducedMotion || cinematic.active || flyover >= 0 || game.wasp || game.celebration || game.cutscene) return;
+    if (Math.hypot(event.x - player.x, event.y - player.y, event.z - player.z) < TOKEN_SHOT.skip) return;
+    tokenAt.set(event.x, event.y, event.z); tokenShot = 0; game.cutscene = TOKEN_SHOT_LENGTH; release();
+    root.classList.add('cinematic'); $('letterbox').hidden = false; $('cine-title').textContent = '🐝 A bee token appeared over there!';
+  }
+  function endTokenShot() {
+    if (tokenShot < 0) return;
+    tokenShot = -1; game.cutscene = 0; root.classList.remove('cinematic'); $('letterbox').hidden = true;
+  }
+  function tokenShotCamera(dt) {
+    tokenShot += paused ? 0 : dt;
+    const { to, hold, back, far, near, elevation } = TOKEN_SHOT, t = tokenShot;
+    if (t >= TOKEN_SHOT_LENGTH) { endTokenShot(); return; }
+    // w blends from the normal view to the shot and back; the distance closes in during the hold and opens again.
+    const w = t < to ? ease(t / to) : t < to + hold ? 1 : ease(1 - (t - to - hold) / back);
+    const push = t < to ? 0 : t < to + hold ? ease((t - to) / hold) : ease(1 - (t - to - hold) / back);
+    camera.getWorldDirection(baseLook); baseLook.multiplyScalar(12).add(camera.position);
+    // Seen from the side the camera already looks from, at a fixed angle from above.
+    const dx = camera.position.x - tokenAt.x, dz = camera.position.z - tokenAt.z, h = Math.hypot(dx, dz) || 1, d = far + (near - far) * push;
+    shotEye.set(tokenAt.x + dx / h * Math.cos(elevation) * d, tokenAt.y + Math.sin(elevation) * d, tokenAt.z + dz / h * Math.cos(elevation) * d);
+    camera.position.lerp(shotEye, w); camera.lookAt(shotLook.lerpVectors(baseLook, tokenAt, w));
+  }
   // Landing tour: camera shots of the live garden, captions on how to play, then "Let's go!".
   const tour = createTour(), reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
   const tourPos = new THREE.Vector3(), tourAim = new THREE.Vector3(), tourLook = new THREE.Vector3();
@@ -959,6 +994,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   let cineShot = -1;
   function startCinematic(mode) {
     if (reducedMotion) return;
+    endTokenShot(); // the bumblebee's entrance takes over the camera
     cinematic.start(); cineShot = -1; game.cutscene = CINEMATIC_LENGTH + 0.1; release();
     root.classList.add('cinematic'); $('letterbox').hidden = false;
     $('cine-title').textContent = mode === 'heist' ? '🐝 It\u2019s back, and it\u2019s hungry!' : '🐝 Here comes the bumblebee!';
@@ -985,7 +1021,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     $('tour-cover').style.opacity = (frame.cover * 0.9).toFixed(3);
     return true;
   }
-  renderer.domElement.addEventListener('pointerdown', () => { if (cinematic.active) endCinematic(); }, true);
+  renderer.domElement.addEventListener('pointerdown', () => { if (cinematic.active) endCinematic(); if (tokenShot >= 0) endTokenShot(); }, true);
   function endTour() {
     $('tour-caption').hidden = true; $('tour-cover').style.opacity = '0'; $('start').classList.remove('pulse');
     root.classList.remove('bee-view'); camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); orbitTarget.set(0, 0, 0); flyover = -1; root.classList.remove('flyover');

@@ -13,11 +13,12 @@ test('every sound file exists, is a small MP3, and the set stays within budget',
     const path = new URL(`../../public/games/hive/audio/${file}.mp3`, import.meta.url), size = statSync(path).size;
     const head = readFileSync(path).subarray(0, 3);
     assert.ok(head.toString('latin1') === 'ID3' || (head[0] === 0xff && (head[1] & 0xe0) === 0xe0), `${file} is MP3`);
-    // Effects stay tiny; the two music loops are larger (96-128 kbit/s, so breeze and water don't warble) and load only when played.
-    if (sound.bus === 'music') { music += size; assert.ok(sound.lazy && size < 1300 * 1024, `${file} under 1300 KiB and lazy`); }
-    else { effects += size; assert.ok(size < 80 * 1024, `${file} under 80 KiB`); }
+    // Effects stay small; noise-like loops (breeze, water, rain, buzz) use 128 kbit/s and the meadow mix 192 kbit/s, because
+    // at lower rates MP3 makes noise swirl and warble. The two background loops load only when played.
+    if (sound.bus === 'music') { music += size; assert.ok(sound.lazy && size < 2000 * 1024, `${file} under 2000 KiB and lazy`); }
+    else { effects += size; assert.ok(size < 128 * 1024, `${file} under 128 KiB`); }
   }
-  assert.ok(effects < 400 * 1024, `effects ${(effects / 1024).toFixed(0)} KiB`); assert.ok(music < 2200 * 1024, `music ${(music / 1024).toFixed(0)} KiB`);
+  assert.ok(effects < 640 * 1024, `effects ${(effects / 1024).toFixed(0)} KiB`); assert.ok(music < 3100 * 1024, `music ${(music / 1024).toFixed(0)} KiB`);
   assert.equal(soundFiles(HIVE_SOUNDS.find(s => s.name === 'grumble')).length, 3, 'three gibberish voices');
 });
 test('no API key or remote audio URL is part of the game code', () => {

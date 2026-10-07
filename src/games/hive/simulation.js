@@ -57,7 +57,7 @@ export class Game {
     this.result = null;
     this.cooldowns = FLOWERS.map(() => 0); this.wilt = FLOWERS.map(() => 0); this.unvisited = FLOWERS.map(() => 0);
     this.lastWinners = [];
-    this.events = [];
+    this.events = []; this.later = []; this.ticking = false;
     this.bumble = null;
     this.pairs = new Map();
     this.toppled = new Map();
@@ -113,10 +113,15 @@ export class Game {
     this.emit({ type: 'topple', owner: o.owner, kind: o.kind, by: p.id, dx: -nx, dz: -nz, x: o.x, y: o.shape === 'sphere' ? o.y : 1, z: o.z });
     return true;
   }
-  emit(event) { this.events.push(event); }
+  // Events raised between ticks (a key press calling the swarm or the bees) are visible at once and are
+  // carried into the next tick's list, so the scene, which reads the list after each tick, sees them too.
+  emit(event) { this.events.push(event); if (!this.ticking) this.later.push(event); }
   tick(dt) {
+    this.events = this.later; this.later = []; this.ticking = true;
+    try { this.step(dt); } finally { this.ticking = false; }
+  }
+  step(dt) {
     dt = clamp(dt, 0, 0.1);
-    this.events = [];
     if (this.cutscene) this.cutscene = Math.max(0, this.cutscene - dt);
     else if (!waspActive(this)) this.remaining -= dt; // the clock waits while the wasp is on the island
     if (this.remaining <= 0) {

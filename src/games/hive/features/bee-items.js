@@ -24,7 +24,7 @@ export function tickBeeItems(game, dt) {
     game.emit({ type: 'bee-item', x: f.x, y: f.y + BEE_ITEM.lift, z: f.z });
     return;
   }
-  item.life -= dt;
+  if (!game.cutscene) item.life -= dt; // the camera ride to a new token does not eat into its time
   if (player && !player.ko && Math.hypot(player.x - item.x, player.y - item.y, player.z - item.z) < BEE_ITEM.reach) {
     player.beeItems = Math.min(BEE_ITEM.max, (player.beeItems ?? 0) + 1);
     game.beeItem = null; game.beeItemIn = between(game, BEE_ITEM.every);

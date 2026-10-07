@@ -18,7 +18,7 @@ export const HIVE_SOUNDS = Object.freeze([
   { name: 'dizzy', gain: 0.4, bus: 'effects' },
   { name: 'slurp', gain: 0.55, bus: 'bumblebee' },
   { name: 'rain', loop: true, gain: 0.35, bus: 'effects' },
-  { name: 'brook', loop: true, gain: 0.13, bus: 'ambience' },
+  { name: 'brook', loop: true, gain: 0.13, bus: 'brook' }, // positioned at the water: louder as you fly close
   { name: 'wasp', loop: true, gain: 0.85, bus: 'bumblebee' },
   { name: 'slam', gain: 0.9, bus: 'own' },
   { name: 'crunch', gain: 1, bus: 'effects' },
@@ -37,6 +37,7 @@ export const MIXER = Object.freeze([
   { id: 'voices', label: 'Voices', preview: 'grumble' },
   { id: 'effects', label: 'Effects', preview: 'bump' },
   { id: 'ambience', label: 'Garden ambience' },
+  { id: 'brook', label: 'Brook & waterfall' },
   { id: 'music', label: 'Music' },
 ].map(Object.freeze));
 // Background choices; the default is the pure nature soundscape, played quietly once the game starts.
