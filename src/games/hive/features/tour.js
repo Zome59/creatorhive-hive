@@ -1,5 +1,8 @@
 // Landing-screen tour: camera shots of the live garden with short captions explaining the game.
 // It ends on "Let's go!" and loops while nobody has started.
+import { readingTime } from './reading.js';
+
+// Each caption stays at least as long as it takes to read it.
 export const TOUR_STEPS = Object.freeze([
   { shot: 'orbit', time: 5, title: 'Welcome to the honey garden', text: 'Help the hive collect 350 nectar in 3 minutes, together with 6 AI scouts.' },
   { shot: 'chase', time: 5, title: 'Collect nectar', text: 'Fly into the glowing honey drops on the flowers. Your bag holds 8, and every 6 drops make your bee glow: its next boost is a power boost.' },
@@ -7,7 +10,7 @@ export const TOUR_STEPS = Object.freeze([
   { shot: 'hive', time: 4.5, title: 'Deliver to the hive', text: 'Bring your nectar home through the glowing ring around the golden hive. Bigger loads score more points, but a heavy bee flies slower.' },
   { shot: 'bumble', time: 5.5, title: 'Beware the bumblebee', text: 'It crashes through the garden: dodge it! When it raids the hive, bump it off.' },
   { shot: 'finale', time: 14, title: 'Let’s go!', text: 'Press ▶ to start.', finale: true },
-].map(Object.freeze));
+].map(step => Object.freeze({ ...step, time: step.finale ? step.time : Math.max(step.time, readingTime(`${step.title} ${step.text}`)) })));
 
 export function createTour(steps = TOUR_STEPS, { fade = 0.45 } = {}) {
   let index = 0, time = 0;

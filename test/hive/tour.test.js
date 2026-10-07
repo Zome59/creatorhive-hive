@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Window } from 'happy-dom';
 import { TOUR_STEPS, createTour } from '../../src/games/hive/features/tour.js';
+import { readingTime, READING } from '../../src/games/hive/features/reading.js';
 import { game as hiveModule } from '../../src/games/hive/index.js';
 
 test('the landing tour explains the game shot by shot, fades between shots, and ends on "Let\'s go!"', () => {
@@ -30,9 +31,10 @@ test('the landing screen shows captions and action, pulses the play button at th
     container.querySelector('#tour-info').click();
     assert.match(dialogs.at(-1), /FULL GUIDE[\s\S]*Nectar power[\s\S]*The bumblebee/, 'the info button opens the full guide');
     assert.match(caption.textContent, /Welcome to the honey garden/); assert.equal(start.classList.contains('pulse'), false);
-    let time = 0; for (; time < 21; time += 0.1) hive.update(0.1, time);
+    const startOf = shot => TOUR_STEPS.slice(0, TOUR_STEPS.findIndex(s => s.shot === shot)).reduce((sum, s) => sum + s.time, 0);
+    let time = 0; for (; time < startOf('bumble') + 1; time += 0.1) hive.update(0.1, time);
     assert.match(caption.textContent, /Beware the bumblebee/);
-    for (; time < 26; time += 0.1) hive.update(0.1, time);
+    for (; time < startOf('finale') + 1; time += 0.1) hive.update(0.1, time);
     assert.match(caption.textContent, /Let’s go!/); assert.ok(start.classList.contains('pulse'), 'play button pulses');
     start.click(); hive.update(0.05, time);
     assert.equal(caption.hidden, true); assert.equal(start.classList.contains('pulse'), false);
@@ -43,4 +45,11 @@ test('the landing screen shows captions and action, pulses the play button at th
     for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }
     browserWindow.happyDOM.abort();
   }
+});
+
+test('every message stays long enough to read, and tour captions follow the same rule', () => {
+  assert.equal(readingTime('Paused.'), READING.min, 'short messages still stay a few seconds');
+  assert.ok(Math.abs(readingTime('one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen') - 6.3) < 1e-9);
+  assert.equal(readingTime('word '.repeat(80)), READING.max, 'capped');
+  for (const step of TOUR_STEPS.filter(s => !s.finale)) assert.ok(step.time >= readingTime(`${step.title} ${step.text}`), `${step.title}: ${step.time} s`);
 });

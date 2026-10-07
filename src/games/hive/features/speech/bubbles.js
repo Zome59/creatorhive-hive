@@ -21,7 +21,7 @@ export function createBubbles(layer, { random = Math.random } = {}) {
     say(id, text, { style = 'talk', delay = 0 } = {}) {
       const existing = items.findIndex(i => i.kind === 'say' && i.id === id && i.delay <= 0);
       if (existing >= 0 && delay <= 0) remove(existing);
-      add({ kind: 'say', id, delay, life: clamp(1.6 + text.length * 0.05, 2, 4) }, text, `bubble ${style}`);
+      add({ kind: 'say', id, delay, life: clamp(1.8 + text.length * 0.065, 2.6, 5) }, text, `bubble ${style}`);
     },
     pow(position, text, style = 'bump') {
       add({ kind: 'pow', world: new THREE.Vector3(position.x, position.y, position.z), delay: 0, life: 0.95 }, text, `pow ${style}`);

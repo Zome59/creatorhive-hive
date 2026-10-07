@@ -20,10 +20,21 @@ const openDialog = html => { $('modal-content').innerHTML = html; if (!modal.ope
 const closeDialog = () => modal.close();
 $('close-modal').onclick = closeDialog;
 modal.addEventListener('click', event => { if (event.target === modal) closeDialog(); });
-let toastTimer;
+// Messages stay long enough to read (1.5 s + 0.32 s per word, 3.5-12 s). A newer one waits until the current
+// one has been up for at least 60 % of its time, so nothing vanishes half read; repeats are dropped.
+let toastTimer, showing = null;
+const toastQueue = [], readFor = message => Math.min(12000, Math.max(3500, 1500 + String(message).trim().split(/\s+/).length * 320));
+function nextToast() {
+  clearTimeout(toastTimer); const message = toastQueue.shift();
+  if (message === undefined) { showing = null; $('toast').classList.remove('visible'); return; }
+  $('toast').textContent = message; $('toast').classList.add('visible');
+  showing = { message, since: Date.now(), time: readFor(message) }; toastTimer = setTimeout(nextToast, showing.time);
+}
 function notify(message) {
-  $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 2600);
+  if (showing?.message === message || toastQueue.includes(message)) return;
+  toastQueue.push(message); if (toastQueue.length > 3) toastQueue.shift();
+  if (!showing) return nextToast();
+  clearTimeout(toastTimer); toastTimer = setTimeout(nextToast, Math.max(0, showing.since + showing.time * 0.6 - Date.now()));
 }
 const arenaFullscreen = () => toggleFullscreen(document.querySelector('.arena'));
 let renderer, host;
@@ -33,7 +44,7 @@ try {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
   $('world').appendChild(renderer.domElement);
-  host = createGameHost({ games, renderer, container: $('game-ui'), controls: $('controls'), navigation: document.querySelector('nav'), arena: document.querySelector('.arena'), notify, openDialog, closeDialog, clearNotification: () => { clearTimeout(toastTimer); $('toast').classList.remove('visible'); }, toggleFullscreen: arenaFullscreen });
+  host = createGameHost({ games, renderer, container: $('game-ui'), controls: $('controls'), navigation: document.querySelector('nav'), arena: document.querySelector('.arena'), notify, openDialog, closeDialog, clearNotification: () => { clearTimeout(toastTimer); toastQueue.length = 0; showing = null; $('toast').classList.remove('visible'); }, toggleFullscreen: arenaFullscreen });
   renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); host.pause(); notify('Graphics paused. Refresh to restore the game.'); });
   host.select(games[0].id);
 } catch (error) {

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Game, RULES, BOOST, TURBO, WILT, HEIST, POWER, SHOVE, LOAD, RAIN, loadFactor } from './simulation.js';
 import { createRainCloud, createBoostRings } from './features/weather.js';
+import { readingTime } from './features/reading.js';
 import { createStream, streamDistance, STREAM, STREAM_INFO, STREAM_Y } from './features/stream.js';
 import { createPowerAura } from './features/power-aura.js';
 import { createShellFur } from './features/shell-fur.js';
@@ -410,12 +411,15 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   // Short reminder overlay while the nectar power waits to be used.
   function updatePowerTip(dt) {
     const charged = started && player?.powered && !game.boosting(player);
-    if (charged) { powerNag -= dt; if (powerNag <= 0) { powerTip = 2.5; powerNag = 14; } } else { powerTip = 0; powerNag = 14; }
+    // The reminder returns every 30 s and, like every hint, stays up long enough to read.
+    if (charged) { powerNag -= dt; if (powerNag <= 0) { powerTip = readingTime($('power-tip').textContent); powerNag = 30; } } else { powerTip = 0; powerNag = 30; }
     powerTip = Math.max(0, powerTip - dt); loadTip = Math.max(0, loadTip - dt);
     // Only one hint at a time: the power reminder wins.
-    $('power-tip').hidden = !powerTip; $('load-tip').hidden = !loadTip || !!powerTip; root.classList.toggle('powered', !!(started && player?.powered));
+    $('power-tip').hidden = !powerTip; $('load-tip').hidden = !loadTip || !!powerTip;
+    root.classList.toggle('top-busy', !$('bumble-alert').hidden || !$('heist-banner').hidden); root.classList.toggle('powered', !!(started && player?.powered));
   }
-  // Information sign while the bumblebee raids the hive, then the outcome for a few seconds.
+  const heistOutcome = (saved, drained) => saved ? `You knocked the bumblebee off the hive. It got away with ${drained} nectar.` : `The bumblebee flew off with ${drained} nectar.`;
+  // Information sign while the bumblebee raids the hive, then the outcome for as long as it takes to read.
   function updateHeist(dt) {
     const b = game.bumble, raid = started && b?.mode === 'heist' && (b.phase === 'approach' || b.phase === 'perched');
     if (heistNote) heistNote.time -= dt;
@@ -430,7 +434,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       $('heist-hits').innerHTML = Array.from({ length: HEIST.hits }, (_, i) => `<i class="${i < b.knocks ? 'hit' : ''}"></i>`).join('');
     } else {
       $('heist-title').textContent = heistNote.saved ? '🎉 HONEY SAVED!' : '🍯 HONEY STOLEN';
-      $('heist-text').textContent = heistNote.saved ? `You knocked the bumblebee off the hive. It got away with ${heistNote.drained} nectar.` : `The bumblebee flew off with ${heistNote.drained} nectar.`;
+      $('heist-text').textContent = heistOutcome(heistNote.saved, heistNote.drained);
       $('heist-hits').innerHTML = '';
     }
   }
@@ -510,8 +514,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (started && event.type === 'bumble-warning') { $('alert-text').textContent = event.mode === 'heist' ? 'BUMBLEBEE WANTS YOUR HONEY' : 'BUMBLEBEE INCOMING'; $('bumble-alert').hidden = false; alertTime = event.seconds + 0.6; }
       if (started && event.type === 'bumble-enter') startCinematic(event.mode);
       if (started && event.type === 'bumble-enter' && event.mode !== 'heist' && reducedMotion) toast('Here it comes! Dodge the bumblebee!');
-      if (started && event.type === 'heist-end') heistNote = { saved: event.rescued, drained: event.drained, time: 4 };
-      if (started && event.type === 'power-ready') { powerTip = 3.5; powerNag = 14; }
+      if (started && event.type === 'heist-end') heistNote = { saved: event.rescued, drained: event.drained, time: readingTime(heistOutcome(event.rescued, event.drained)) };
+      if (started && event.type === 'power-ready') { powerTip = readingTime($('power-tip').textContent); powerNag = 30; }
       if (started && event.type === 'scout-mood') { const lines = event.mood === 'fast' ? ['Wheee!', 'Coming through!', 'Zoom zoom!'] : ['Yawn…', 'So sleepy…', 'Slow and steady…']; bubbles.say(event.id, lines[Math.floor(Math.random() * lines.length)]); }
       if (player && event.id === player.id && event.type === 'turbo' && started) { boostRings.trigger(false); skyFlash = 0.5; toast(`💨 Speed mode for ${TURBO.duration} seconds!`); }
       if (player && event.id === player.id && event.type === 'boost' && started) { boostRings.trigger(event.power); skyFlash = event.power ? 1 : 0.6; }
@@ -519,7 +523,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (player && event.id === player.id && event.type === 'rain-end') { const at = beeModels.get(player.id)?.group.position; if (at) burst.emit(at, { color: '#9fd6ff', count: 26, speed: 3.2, gravity: -6, size: 0.08, life: 0.7 }); if (view !== 'bee') bubbles.say(player.id, 'Brrrrr!'); }
       if (event.type === 'round-end') { alertTime = 0; $('bumble-alert').hidden = true; endCinematic(); }
       if (started && event.type === 'round-end' && event.result === 'complete') { toast('🍯 Goal reached! The hive overflows with honey!'); audio.play('deliver', null, { rate: 0.85 }); }
-      if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = 6;
+      if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = readingTime($('load-tip').textContent);
       if (event.type === 'wilt') burst.emit(probe.set(event.x, event.y, event.z), { color: '#a08a4a', count: 12, speed: 1.2, gravity: -3, size: 0.1, life: 1.2 });
       if (event.type === 'sprout') burst.emit(probe.set(event.x, 0.4, event.z), { color: '#9bd36a', count: 16, speed: 2.2, gravity: -5, size: 0.09 });
       if (event.type === 'topple') burst.emit(probe.set(event.x, event.y, event.z), { color: event.kind === 'tree' ? '#7fae5c' : '#f2a5c0', count: 22, speed: 3.4, gravity: -4, size: 0.14 });

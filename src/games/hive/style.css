@@ -90,7 +90,7 @@
 
 /* Bumblebee warning: red pulse at the screen edges and a direction marker. */
 .garden-ui .bumble-alert { position: absolute; z-index: 1100; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 86px; pointer-events: none; box-shadow: inset 0 0 140px 30px #e0241bb0; background: #c01a1222; animation: garden-alert-pulse .6s ease-in-out infinite alternate; }
-.garden-ui .alert-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 2px solid #ffd9d2; border-radius: 3px; background: #b3170fe6; color: #fff; font-size: 12px; letter-spacing: 1.5px; box-shadow: 0 6px 24px #0006; }
+.garden-ui .alert-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 2px solid #ffd9d2; border-radius: 3px; background: #b3170fe6; color: #fff; font-size: 15px; letter-spacing: 1.5px; box-shadow: 0 6px 24px #0006; }
 .garden-ui .alert-banner strong { font-weight: 800; }
 .garden-ui .alert-banner em { min-width: 22px; padding: 2px 6px; border-radius: 2px; background: #fff; color: #b3170f; font-style: normal; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
 @keyframes garden-alert-pulse { from { box-shadow: inset 0 0 90px 10px #e0241b80; background: #c01a1210; } to { box-shadow: inset 0 0 170px 40px #e0241bc8; background: #c01a1230; } }
@@ -105,7 +105,7 @@
 .garden-ui .altitude { display: none; }
 .garden-ui .bubble { max-width: 150px; font-size: 12px; padding: 6px 10px; }
 .garden-ui .bumble-alert { padding-top: 120px; }
-.garden-ui .alert-banner { font-size: 10px; gap: 8px; }
+.garden-ui .alert-banner { font-size: 12px; gap: 8px; }
 
 }
 @media (pointer: coarse) {
@@ -138,7 +138,7 @@
 .garden-ui .controls-panel.dragging { box-shadow: 0 10px 30px #0007; }
 
 /* Honey thief: an information sign with the bump counter. */
-.garden-ui .heist-banner { position: absolute; z-index: 1100; left: 50%; top: 86px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(660px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #ffe08a; border-radius: 3px; background: #6b3f05eb; color: #fff6dc; font-size: 11px; letter-spacing: .4px; box-shadow: 0 6px 24px #0006; pointer-events: none; }
+.garden-ui .heist-banner { position: absolute; z-index: 1100; left: 50%; top: 86px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(660px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #ffe08a; border-radius: 3px; background: #6b3f05eb; color: #fff6dc; font-size: 14px; letter-spacing: .4px; box-shadow: 0 6px 24px #0006; pointer-events: none; }
 .garden-ui .heist-banner strong { color: #ffd34d; letter-spacing: 1.2px; white-space: nowrap; }
 .garden-ui .heist-banner.saved { background: #24521feb; border-color: #b9f0a0; }
 .garden-ui .heist-banner.saved strong { color: #c9ff9e; }
@@ -162,7 +162,7 @@
 
 }
 @media (max-width: 480px) {
-.garden-ui .heist-banner { top: 120px; flex-wrap: wrap; justify-content: center; font-size: 10px; }
+.garden-ui .heist-banner { top: 120px; flex-wrap: wrap; justify-content: center; font-size: 12px; }
 
 }
 
@@ -170,9 +170,9 @@
 .garden-ui .tour-cover { position: absolute; inset: 0; background: #0b0d08; opacity: 0; pointer-events: none; }
 .garden-ui .tour-caption { position: absolute; z-index: 1100; left: 50%; top: 84px; transform: translateX(-50%); width: min(520px, calc(100% - 32px)); padding: 14px 18px 12px; border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: 3px; background: var(--panel-glass); backdrop-filter: blur(12px); color: var(--text); pointer-events: none; }
 .garden-ui .tour-caption.show { animation: garden-caption .55s cubic-bezier(.2, .9, .3, 1.2) both; }
-.garden-ui .tour-caption small { display: block; margin-bottom: 6px; color: var(--green); font-size: 8px; letter-spacing: 1.2px; }
+.garden-ui .tour-caption small { display: block; margin-bottom: 6px; color: var(--green); font-size: 10px; letter-spacing: 1.2px; }
 .garden-ui .tour-caption strong { display: block; margin-bottom: 6px; font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
-.garden-ui .tour-caption span { display: block; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.garden-ui .tour-caption span { display: block; color: var(--muted); font-size: 14px; line-height: 1.55; }
 .garden-ui .tour-caption.finale { text-align: center; border-left-width: 1px; }
 .garden-ui .tour-caption.finale strong { font-size: 30px; color: var(--green); }
 .garden-ui .tour-dots { display: flex; gap: 5px; margin-top: 10px; }
@@ -186,6 +186,7 @@
 .garden-ui .tour-caption { top: 118px; padding: 11px 13px 10px; }
 .garden-ui .tour-caption strong { font-size: 15px; }
 .garden-ui .tour-caption.finale strong { font-size: 24px; }
+.garden-ui .tour-caption span { font-size: 12.5px; }
 
 }
 @media (prefers-reduced-motion: reduce) {
@@ -218,13 +219,13 @@
 .garden-ui .power.ready > span { color: #ffd23f; text-shadow: 0 0 8px #ffd23f99; }
 .garden-ui .power.ready .power-pips i { box-shadow: 0 0 6px #ffd23f; animation: garden-power .8s ease-in-out infinite alternate; }
 @keyframes garden-power { to { opacity: .55; } }
-.garden-ui .power-tip { position: absolute; z-index: 1100; left: 50%; bottom: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(620px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #ffd23f; border-radius: 3px; background: #3d2f05ee; color: #fff4cf; font-size: 11px; box-shadow: 0 0 24px #ffd23f66; pointer-events: none; animation: garden-tip .4s cubic-bezier(.2, 1.5, .4, 1) both; }
+.garden-ui .power-tip { position: absolute; z-index: 1100; left: 50%; bottom: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(620px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #ffd23f; border-radius: 3px; background: #3d2f05ee; color: #fff4cf; font-size: 14px; box-shadow: 0 0 24px #ffd23f66; pointer-events: none; animation: garden-tip .4s cubic-bezier(.2, 1.5, .4, 1) both; }
 .garden-ui .power-tip strong { color: #ffd23f; letter-spacing: 1.2px; white-space: nowrap; }
 @keyframes garden-tip { from { opacity: 0; transform: translate(-50%, 12px) scale(.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 .garden-ui.bee-view.powered::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 90px 12px #ffd23f55; animation: garden-power 1s ease-in-out infinite alternate; }
 @media (max-width: 760px) {
 .garden-ui .flight-hud .power { display: none; }
-.garden-ui .power-tip { bottom: 150px; flex-wrap: wrap; justify-content: center; font-size: 10px; }
+.garden-ui .power-tip { bottom: 150px; flex-wrap: wrap; justify-content: center; font-size: 12px; }
 
 }
 .garden-ui .mix-row.track { grid-template-columns: 1fr; padding-top: 6px; border-top: 1px dashed var(--line); margin-top: 4px; }
@@ -238,12 +239,12 @@
 .garden-ui .score strong { display: block; font-size: 18px; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .garden-ui .score small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; letter-spacing: .6px; white-space: nowrap; }
 .garden-ui #bag-label.heavy { color: #f0a31c; }
-.garden-ui .load-tip { position: absolute; z-index: 1100; left: 50%; bottom: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(640px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #f0a31c; border-radius: 3px; background: #3a2408ee; color: #ffeccc; font-size: 11px; line-height: 1.5; pointer-events: none; animation: garden-tip .4s cubic-bezier(.2, 1.5, .4, 1) both; }
+.garden-ui .load-tip { position: absolute; z-index: 1100; left: 50%; bottom: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(640px, calc(100% - 32px)); padding: 10px 16px; border: 2px solid #f0a31c; border-radius: 3px; background: #3a2408ee; color: #ffeccc; font-size: 14px; line-height: 1.5; pointer-events: none; animation: garden-tip .4s cubic-bezier(.2, 1.5, .4, 1) both; }
 .garden-ui .load-tip strong { color: #f7b53b; letter-spacing: 1.2px; white-space: nowrap; }
 .garden-ui .pow.points { background: none; clip-path: none; padding: 0; color: #ffd23f; font-size: 34px; -webkit-text-stroke: 2px #4a2c00; text-shadow: 3px 3px 0 #4a2c00, 0 0 18px #ffd23f99; }
 .garden-ui .intro small { display: block; margin-top: 6px; color: var(--green); font-size: 10px; letter-spacing: .4px; }
 @media (max-width: 760px) {
-.garden-ui .load-tip { bottom: 150px; flex-wrap: wrap; justify-content: center; font-size: 10px; }
+.garden-ui .load-tip { bottom: 150px; flex-wrap: wrap; justify-content: center; font-size: 12px; }
 
 }
 
@@ -302,3 +303,18 @@
 /* Start flight around the island: the flight HUD waits until the camera reaches your bee. */
 .garden-ui .flight-hud { transition: opacity .5s; }
 .garden-ui.flyover .flight-hud { opacity: 0; pointer-events: none; }
+
+/* Readable hints: they sit under the top bar, apart from the toasts at the bottom, and move one row lower while
+   the bumblebee alert or the raid sign is showing. The landing text is set larger too. */
+.garden-ui .power-tip, .garden-ui .load-tip { top: 86px; bottom: auto; }
+.garden-ui.top-busy .power-tip, .garden-ui.top-busy .load-tip { top: 166px; }
+.garden-ui .intro h1 { font-size: 18px; }
+.garden-ui .intro p { font-size: 14px; line-height: 1.55; }
+.garden-ui .intro small { font-size: 12.5px; letter-spacing: .3px; }
+@media (max-width: 480px) {
+.garden-ui .power-tip, .garden-ui .load-tip { top: 120px; bottom: auto; }
+.garden-ui.top-busy .power-tip, .garden-ui.top-busy .load-tip { top: 218px; }
+.garden-ui .intro p { font-size: 12.5px; }
+.garden-ui .intro small { font-size: 11.5px; }
+
+}

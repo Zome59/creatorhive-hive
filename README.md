@@ -109,6 +109,10 @@ A large **controls panel**, by default hanging half over the left edge of the ga
 
 Touch devices show directional, climb/sink, boost, and speed buttons; drag the garden to rotate the view (or to look in bee view). Nectar collects automatically when you fly close to a honey drop; drops grow on low meadow flowers, mid-height flowers, and tall sunflowers, so altitude matters. Your bag holds eight drops. Fly into the center hive's glowing ring to deliver. Scouts are AI, visibly labeled throughout the interface. They fly at slightly different paces (±12 %), and now and then one gets a short burst of zeal (“Wheee!”) or a lazy spell (“Yawn…”). Leaving the window pauses active play; clicking back into it resumes on its own.
 
+### Messages
+
+Every message stays up long enough to read calmly (1.5 s plus about a third of a second per word, 3.5 to 12 seconds), in 14 px text (12 px on phones). A newer message waits until the current one has been up for most of its time, so nothing vanishes half read. Hints such as **⚡ NECTAR POWER** sit under the top bar, apart from the messages at the bottom, and move one row lower while the bumblebee alert or the raid sign shows. The landing tour gives each caption the same reading time.
+
 ### Start flight
 
 Each round opens with a short flight: the camera circles the floating island from outside (the brook pours over the rim as a waterfall), swoops down to your bee (“That's you!”), and eases into the garden view, which keeps your bee in the centre from then on. The round clock waits meanwhile. Enter or Esc jumps to your bee; any flight key ends the flight and you fly at once. With reduced motion, a short zoom replaces the flight.

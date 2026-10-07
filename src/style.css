@@ -48,7 +48,7 @@ main { max-width: 1800px; padding: 18px 26px 12px; margin: auto; }
 .primary:hover { filter: brightness(1.15); }
 .primary span { font-size: 17px; }
 .play-button { justify-content: center; min-width: 64px; min-height: 54px; font-size: 26px; }
-.toast { position: absolute; left: 50%; bottom: 110px; width: max-content; max-width: 90%; text-align: center; padding: 10px 15px; border: 1px solid var(--line); background: var(--panel-glass); color: var(--text); font-size: 10px; border-radius: 3px; opacity: 0; transform: translate(-50%,8px); transition: .2s; pointer-events: none; }
+.toast { position: absolute; left: 50%; bottom: 110px; width: max-content; max-width: 90%; text-align: center; padding: 10px 15px; border: 1px solid var(--line); background: var(--panel-glass); color: var(--text); font-size: 14px; line-height: 1.45; border-radius: 3px; opacity: 0; transform: translate(-50%,8px); transition: .2s; pointer-events: none; }
 .toast.visible { opacity: 1; transform: translate(-50%,0); }
 .controls { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; padding: 16px 0; font-size: 10px; color: var(--muted); border-bottom: 1px solid var(--line); }
 .controls-label { color: var(--muted); font-size: 9px; letter-spacing: 1px; }
@@ -88,7 +88,8 @@ main { padding: 12px 12px 6px; }
 .intro h1 { font-size: 14px; }
 .intro p { font-size: 9px; }
 .primary { width: 100%; justify-content: space-between; padding: 10px 12px; }
-.toast { bottom: 152px; font-size: 9px; }
+.toast { bottom: 152px; font-size: 12px; }
+.controls > span:not(.controls-label) { white-space: normal; } /* long control hints wrap instead of widening the page */
 
 }
 @media (pointer: coarse) {
