@@ -53,6 +53,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (!audio.enabled) audio.setMix(INTRO_MIX, 0); $('sound-hint').hidden = true;
     audio.setEnabled(soundOn); audio.setMix(1, 4); soundscape.reset(); // fade up from the quiet intro
     toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.'); $('intro-best').hidden = true;
+    spotlight = SPOTLIGHT; bubbles.say(player.id, 'That\u2019s you!', { delay: 0.6 });
   };
   function togglePause() {
     if (!started) return;
@@ -427,7 +428,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     const right = Number(held('KeyD', 'ArrowRight')) - Number(held('KeyA', 'ArrowLeft'));
     return { ...orbit.movement(forward, right), y: vertical, dash };
   }
-  let strafe = 0;
+  // Start of play: zoom in on the player's bee and make it glow for a moment, then ease back out.
+  const SPOTLIGHT = 3.5, spotEye = new THREE.Vector3(), spotAim = new THREE.Vector3();
+  let strafe = 0, spotlight = 0;
   function update(dt, elapsed) {
     if (!active) return;
     let ticked = false;
@@ -454,9 +457,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bee.wings.forEach((w, i) => { w.rotation.z = Math.sin(elapsed * (game.boosting(p) ? 95 : 75)) * 0.45 * (i ? 1 : -1); });
       bee.shadow.position.set(p.x, 0.07, p.z); bee.shadow.material.opacity = 0.45 - Math.min(0.3, (p.y - WORLD.floor) * 0.035);
       bee.stars.group.visible = p.stun > 0.2; if (p.stun) bee.stars.update(elapsed);
-      bee.aura?.update(dt, elapsed, { active: p.powered, boosting: game.powerBoosting(p) });
+      bee.aura?.update(dt, elapsed, { active: p.powered || (own && spotlight > 0.3), boosting: game.powerBoosting(p) });
       bee.group.visible = !(own && view === 'bee'); // Name tags of bees right in front of the camera would cover the view (tour close-ups, bee view).
-      const near = camera.position.distanceTo(bee.group.position); bee.label.visible = cinematic.active ? false : !started ? near > 11 : view !== 'bee' || near > 6;
+      const near = camera.position.distanceTo(bee.group.position); bee.label.visible = cinematic.active ? false : !started ? near > 11 : (view !== 'bee' && !spotlight) || near > 6;
       bee.fuzz.userData.setLayers(fuzzLayers(near));
       if (bee.stem) { bee.stem.visible = view === 'orbit' && started; bee.stem.position.copy(bee.group.position); bee.stem.scale.y = Math.max(0.01, bee.group.position.y - 0.1); }
     }
@@ -499,6 +502,13 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       // The garden view follows the player more on the larger island but keeps the hive in frame.
       orbitTarget.lerp(probe.set(player ? player.x * 0.55 : 0, player ? Math.max(0, player.y - 2) * 0.5 : 0, player ? player.z * 0.55 : 0), 1 - Math.exp(-dt * 3));
       orbit.apply(camera, orbitTarget);
+      if (spotlight > 0 && own) {
+        // Ease in over the first second, hold, ease out over the last 1.2 s.
+        spotlight = Math.max(0, spotlight - (paused ? 0 : dt));
+        const since = SPOTLIGHT - spotlight, k = Math.min(1, since / 1, spotlight / 1.2), ease = k * k * (3 - 2 * k);
+        spotAim.copy(own.group.position); spotEye.copy(camera.position).sub(orbitTarget).setLength(9).add(spotAim);
+        camera.position.lerp(spotEye, ease); camera.lookAt(probe.copy(orbitTarget).lerp(spotAim, ease));
+      }
     }
     if (!started && audio.enabled && !paused) { // landing screen: hear the garden from the tour camera
       camera.getWorldDirection(probe);

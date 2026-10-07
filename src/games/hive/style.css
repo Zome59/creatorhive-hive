@@ -282,3 +282,13 @@
 /* Full guide: info button in the tour caption and the HUD, and the guide dialog content. */
 .garden-ui .tour-caption .tour-info { position: absolute; top: 10px; right: 10px; pointer-events: auto; display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--green); border-radius: 3px; background: var(--panel); color: var(--green); font-size: 10px; letter-spacing: .4px; }
 .garden-ui .tour-caption .tour-info:hover { background: var(--green); color: #17140f; }
+
+/* Flight HUD holds more now (score, power, altitude keys): wider, one line per label, no overflow. */
+.garden-ui .flight-hud { max-width: 900px; gap: 22px; }
+.garden-ui .flight-hud button { flex: none; white-space: nowrap; }
+.garden-ui .flight-hud button span { white-space: nowrap; font-size: 10px; }
+@media (max-width: 1100px) {
+.garden-ui .flight-hud button span { display: none; }
+.garden-ui .flight-hud { gap: 14px; }
+
+}
