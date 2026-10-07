@@ -27,7 +27,7 @@ async function defaultLoad(file) {
 
 // Created on the first play gesture. Loops are keyed (one buzz per bee); one-shots are fire-and-forget.
 export function createHiveAudio({ createContext = defaultContext, load = defaultLoad, random = Math.random } = {}) {
-  let context = null, master, enabled = false, running = false, volume = 0.85;
+  let context = null, master, enabled = false, running = false, volume = 0.85, mix = 1;
   const buffers = new Map(), loops = new Map(), voices = new Set(), buses = new Map(), requested = new Set();
   const levels = new Map(MIXER.map(channel => [channel.id, 1]));
   const output = bus => buses.get(bus) ?? master;
@@ -66,10 +66,11 @@ export function createHiveAudio({ createContext = defaultContext, load = default
       for (const [param, value] of [[node.positionX, x], [node.positionY, y], [node.positionZ, z]]) smooth ? param.setTargetAtTime(value, t, 0.03) : param.setValueAtTime(value, t);
     } else node.setPosition(x, y, z);
   }
-  function apply() {
+  // `mix` scales everything (quiet on the landing screen); `fade` is the time constant of the change.
+  function apply(fade = 0.05) {
     if (!master) return;
     master.gain.cancelScheduledValues(context.currentTime);
-    master.gain.setTargetAtTime(enabled ? volume * levels.get('master') : 0, context.currentTime, 0.05);
+    master.gain.setTargetAtTime(enabled ? volume * levels.get('master') * mix : 0, context.currentTime, fade);
   }
   function stopLoop(key) {
     const loop = loops.get(key); if (!loop) return;
@@ -88,6 +89,8 @@ export function createHiveAudio({ createContext = defaultContext, load = default
       else if (buses.has(id)) buses.get(id).gain.setTargetAtTime(levels.get(id), context.currentTime, 0.03);
     },
     resetLevels() { for (const id of levels.keys()) this.setLevel(id, 1); },
+    // Overall scale with a soft transition, e.g. 0.3 on the landing screen fading to 1 when play starts.
+    setMix(value, seconds = 0.6) { mix = Math.max(0, Math.min(1, value)); apply(Math.max(0.01, seconds / 3)); },
     // Must be called from a user gesture the first time so browsers allow playback.
     setEnabled(value) {
       enabled = !!value;

@@ -16,6 +16,7 @@ import { createSoundscape } from './features/audio/soundscape.js';
 import { createBubbles } from './features/speech/bubbles.js';
 import { isFullscreenOf } from './features/fullscreen-state.js';
 import { createTour } from './features/tour.js';
+import { GUIDE_HTML } from './features/guide.js';
 import { createCinematic, CINEMATIC_LENGTH } from './features/cinematic.js';
 import { createReactions } from './features/speech/reactions.js';
 
@@ -33,19 +34,24 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
 
   function setSound(on) {
     soundOn = on;
-    if (started) audio.setEnabled(on);
+    if (started || audio.enabled || on) audio.setEnabled(on);
     $('sound').innerHTML = `♪ <span>Sound ${on ? 'on' : 'off'}</span>`; $('sound').setAttribute('aria-pressed', on); $('sound').setAttribute('aria-label', on ? 'Disable sound' : 'Enable sound');
   }
   $('sound').onclick = () => setSound(!soundOn);
   const fullscreen = () => Promise.resolve().then(toggleFullscreen).catch(() => toast('Fullscreen unavailable in this browser.'));
   $('fullscreen').onclick = fullscreen;
   $('view').disabled = true;
+  // The landing screen plays quietly from the first click or key press (browsers need a gesture for sound).
+  const INTRO_MIX = 0.3;
+  function introSound() { if (active && !started && soundOn && !audio.enabled) { audio.setMix(INTRO_MIX, 0); audio.setEnabled(true); $('sound-hint').hidden = true; } }
+  document.addEventListener('pointerdown', introSound, true); document.addEventListener('keydown', introSound, true);
   $('start').onclick = () => {
     if (!renderer || started) return;
     endTour();
     game.reset(); game.round = 1; player = game.addPlayer(); started = true;
     $('intro').hidden = true; $('flight-hud').hidden = false; $('pause').disabled = false; $('view').disabled = false; $('phase').textContent = 'ACTIVE';
-    audio.setEnabled(soundOn); soundscape.reset();
+    if (!audio.enabled) audio.setMix(INTRO_MIX, 0); $('sound-hint').hidden = true;
+    audio.setEnabled(soundOn); audio.setMix(1, 2.5); soundscape.reset(); // fade up from the quiet intro
     toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.'); $('intro-best').hidden = true;
   };
   function togglePause() {
@@ -103,7 +109,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     const panel = $('controls-panel');
     if (panel.hidden || !root.isConnected) return;
     const area = root.getBoundingClientRect(), w = panel.offsetWidth || 212, h = panel.offsetHeight || 320;
-    const spot = panelSpot ?? { x: area.left + 16, y: area.top + Math.max(64, (area.height - h) / 2) };
+    // By default it hangs half over the left edge of the game, outside where there is room.
+    const spot = panelSpot ?? { x: Math.max(8, area.left - w * 0.45), y: area.top + Math.max(64, (area.height - h) / 2) };
     const x = Math.max(56 - w, Math.min((globalThis.innerWidth || 1280) - 56, spot.x)), y = Math.max(0, Math.min((globalThis.innerHeight || 800) - 40, spot.y));
     panel.style.left = `${x}px`; panel.style.top = `${y}px`;
   }
@@ -130,6 +137,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   for (const name of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(name, onFullscreen);
   for (const button of root.querySelectorAll('[data-fs]')) button.onclick = () => $(button.dataset.fs).click();
   $('controls-toggle').onclick = () => setPanel(!panelOpen);
+  // Full guide: pauses a running round first.
+  const openGuide = () => { if (started && !paused) togglePause(); showModal(GUIDE_HTML); };
+  $('guide').onclick = openGuide; $('tour-info').onclick = openGuide;
   $('controls-close').onclick = () => setPanel(false);
   const release = () => { keys.clear(); syncHeld(); };
   // Sound mixer: one slider per channel plus master, previewing the channel when released.
@@ -164,7 +174,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     keys.add(e.code); syncHeld();
   });
   document.addEventListener('keyup', e => { keys.delete(e.code); syncHeld(); });
-  window.addEventListener('blur', () => { release(); viewControls.cancel(); if (active && started && !paused) togglePause(); });
+  window.addEventListener('blur', () => { release(); viewControls.cancel(); if (active && started && !paused) togglePause(); if (active && !started) audio.suspend(); });
+  window.addEventListener('focus', () => { if (active && !started) audio.resume(); });
   for (const button of root.querySelectorAll('[data-key]')) {
     button.addEventListener('pointerdown', e => { e.preventDefault(); button.setPointerCapture(e.pointerId); keys.add(button.dataset.key); syncHeld(); });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => { keys.delete(button.dataset.key); syncHeld(); });
@@ -489,6 +500,10 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       orbitTarget.lerp(probe.set(player ? player.x * 0.55 : 0, player ? Math.max(0, player.y - 2) * 0.5 : 0, player ? player.z * 0.55 : 0), 1 - Math.exp(-dt * 3));
       orbit.apply(camera, orbitTarget);
     }
+    if (!started && audio.enabled && !paused) { // landing screen: hear the garden from the tour camera
+      camera.getWorldDirection(probe);
+      soundscape.frame(game, null, dt, { listener: { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(probe.x, probe.z), pitch: Math.asin(Math.max(-1, Math.min(1, probe.y))) }, music });
+    }
     if (player && started) {
       const listener = cinematic.active ? { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(-camera.matrixWorld.elements[8], -camera.matrixWorld.elements[10]) } : view === 'bee' ? { x: player.x, y: player.y, z: player.z, yaw: beeView.yaw, pitch: beeView.pitch } : { x: player.x, y: player.y, z: player.z, yaw: orbit.azimuth + Math.PI };
       if (!paused) soundscape.frame(game, player, dt, { listener, beeView: view === 'bee', music });
@@ -510,6 +525,12 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   // Landing tour: camera shots of the live garden, captions on how to play, then "Let's go!".
   const tour = createTour(), reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
   const tourPos = new THREE.Vector3(), tourAim = new THREE.Vector3(), tourLook = new THREE.Vector3();
+  // Glide path for the tour's bee view: a wide, gentle arc around the hive that climbs and sinks
+  // (flowers grow at different heights), chosen so it passes at least 2 m from trees and flowers.
+  const beePath = new THREE.CatmullRomCurve3(Array.from({ length: 9 }, (_, k) => {
+    const s = k / 8, a = 5.5 + s * 1.5, r = 17 - s * 7;
+    return new THREE.Vector3(Math.sin(a) * r, 2.8 + Math.sin(s * Math.PI * 1.6) * 1.2, Math.cos(a) * r);
+  }), false, 'centripetal');
   let tourStep = -1, tourYaw = null, tourScout = 1;
   const wrap = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
   function showCaption(step) {
@@ -532,23 +553,24 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     root.classList.toggle('bee-view', step.shot === 'bee' && !reducedMotion);
     if (reducedMotion) return;
     const scout = game.players.get(tourScout) ?? game.players.values().next().value;
-    let fov = ORBIT_FOV, snap = cover > 0.8 || tourPos.lengthSq() === 0;
+    let fov = ORBIT_FOV, snap = cover > 0.8 || tourPos.lengthSq() === 0; // cut during the dark part of each fade
     if (step.shot === 'orbit' || step.shot === 'finale') {
       const a = 0.6 + elapsed * 0.08, r = step.finale ? 46 : 36;
       tourPos.set(Math.sin(a) * r, step.finale ? 27 : 19, Math.cos(a) * r); tourLook.set(0, 1.5, 0);
     } else if (step.shot === 'hive') {
       const a = t * 0.3 + 0.4; tourPos.set(Math.sin(a) * 16, 8, Math.cos(a) * 16); tourLook.set(0, 2.4, 0);
-    } else if (step.shot === 'chase' || step.shot === 'bee') {
-      // Follow one scout from behind, then look through its eyes.
-      tourYaw = tourYaw === null ? scout.yaw : tourYaw + wrap(scout.yaw - tourYaw) * Math.min(1, dt * 3);
+    } else if (step.shot === 'chase') {
+      // Follow one scout from behind, smoothing its quick turns so the camera stays calm.
+      const model = beeModels.get(scout.id), at = model ? model.group.position : scout;
+      tourYaw = tourYaw === null ? scout.yaw : tourYaw + wrap(scout.yaw - tourYaw) * Math.min(1, dt * 1.2);
       const fx = Math.sin(tourYaw), fz = Math.cos(tourYaw);
-      if (step.shot === 'chase') { tourPos.set(scout.x - fx * 3.8, scout.y + 1.7, scout.z - fz * 3.8); tourLook.set(scout.x + fx * 2, scout.y + 0.2, scout.z + fz * 2); const model = beeModels.get(scout.id); if (model) model.label.visible = false; }
-      else {
-        fov = 72; snap = true;
-        tourPos.set(scout.x + fx * 0.32, scout.y + 0.2, scout.z + fz * 0.32);
-        tourLook.set(tourPos.x + fx * 4, tourPos.y - 0.35 + Math.max(-1.2, Math.min(1.2, scout.vy * 0.3)), tourPos.z + fz * 4);
-        const model = beeModels.get(scout.id); if (model) model.group.visible = false;
-      }
+      tourPos.set(at.x - fx * 4.2, at.y + 1.8, at.z - fz * 4.2); tourLook.set(at.x + fx * 2, at.y + 0.2, at.z + fz * 2);
+      if (model) model.label.visible = false;
+    } else if (step.shot === 'bee') {
+      // A calm first-person glide past flowers of different heights toward the hive.
+      fov = 66;
+      const u = Math.min(1, t / step.time) * 0.9, point = beePath.getPointAt(u), ahead = beePath.getPointAt(Math.min(1, u + 0.12));
+      tourPos.set(point.x, point.y + Math.sin(elapsed * 1.2) * 0.02, point.z); tourLook.set(ahead.x, ahead.y + 0.15, ahead.z); // nearly level gaze: flowers and bees ahead, not grass
     } else if (step.shot === 'bumble') {
       // A real bumblebee charges into a group of scouts, so the tour shows bumps, stars, and shouting.
       if (!game.bumble) releaseBumblebee(game);
@@ -556,7 +578,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       tourPos.set(p.x + Math.sin(yaw + 0.6) * 9, p.y + 1.8, p.z + Math.cos(yaw + 0.6) * 9); tourLook.copy(p);
     }
     if (snap) { camera.position.copy(tourPos); tourAim.copy(tourLook); }
-    else { camera.position.lerp(tourPos, 1 - Math.exp(-dt * 4)); tourAim.lerp(tourLook, 1 - Math.exp(-dt * 6)); }
+    else { camera.position.lerp(tourPos, 1 - Math.exp(-dt * 4)); tourAim.lerp(tourLook, 1 - Math.exp(-dt * 2.5)); } // the gaze follows slowly: calm pans
     camera.lookAt(tourAim);
     if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = snap ? fov : camera.fov + (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
   }
@@ -602,7 +624,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     update,
     pause() { if (started && !paused) togglePause(); },
     resize(w, h) { width = w; height = h; camera.aspect = w / h; camera.updateProjectionMatrix(); placePanel(); },
-    activate() { active = true; container.replaceChildren(root); onFullscreen(); placePanel(); renderer.domElement.setAttribute('aria-label', 'A floating garden with bees and a golden hive'); if (started && !paused) audio.resume(); updateUI(); },
+    activate() { active = true; container.replaceChildren(root); onFullscreen(); placePanel(); renderer.domElement.setAttribute('aria-label', 'A floating garden with bees and a golden hive'); if (!paused) audio.resume(); updateUI(); },
     deactivate() { active = false; endCinematic(); release(); viewControls.cancel(); look.release(); audio.suspend(); root.remove(); },
   };
 }

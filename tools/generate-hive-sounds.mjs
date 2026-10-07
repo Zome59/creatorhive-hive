@@ -205,7 +205,7 @@ function soundscape({ length, bed, birds, brook }) {
     out[i * 2] += v * 0.8; out[i * 2 + 1] += v * 0.55;
   }
   // Birds only now and then: four short phrases, alternating left and right.
-  const birdClips = birds.map(seed => clip('meadow-birds', seed)), birdLevel = 10 ** (-27 / 20), phrase = Math.round(4.5 * RATE), skip = Math.round(0.5 * RATE);
+  const birdClips = birds.map(seed => clip('meadow-birds', seed)), birdLevel = 10 ** (-35 / 20), phrase = Math.round(4.5 * RATE), skip = Math.round(0.5 * RATE);
   [[6, -0.5], [26, 0.45], [47, -0.25], [66, 0.5]].forEach(([start, pan], n) => {
     const c = birdClips[n % birdClips.length], part = c.subarray(skip, skip + phrase), scale = birdLevel / Math.max(1e-6, rms(part)), from = Math.round(start * RATE), soft = Math.round(0.6 * RATE);
     for (let i = 0; i < part.length && from + i < size; i++) {

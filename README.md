@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**. Click **▶** (or press **Enter**) to begin. The landing screen plays a short guided tour of the live garden: camera shots, including a moment in bee view, with captions explaining how to play. It ends on **“Let’s go!”** with a pulsing play button and then loops.
+Open **http://127.0.0.1:5173**. Click **▶** (or press **Enter**) to begin. The landing screen plays a short guided tour of the live garden: camera shots, including a moment in bee view, with captions explaining how to play. It ends on **“Let’s go!”** with a pulsing play button and then loops. The garden is audible quietly from your first click or key press (browsers need a gesture before playing sound) and fades up to full volume when the round starts. **ⓘ Full guide** in the caption, or **?** in the HUD during play (which pauses), opens the complete game guide.
 
 The interface uses a minimal dark terminal theme: gameplay fills the page, the objective and timer sit inside the game, and a compact controls strip stays beneath it. Use the **Honey Retrieval** and **Worker Bee Sim** buttons to switch games; the inactive mode stops updating and its UI is removed from the page until you return.
 
@@ -101,7 +101,7 @@ Publishing is performed by Cloudflare's connected build after you push a commit.
 | F or ⛶ button | Fullscreen game area |
 | P or pause button | Pause / resume |
 
-A **controls panel** on the side of the game lists every key, with the altitude keys highlighted; keys light up while you hold them. Drag it by its header anywhere, even beside the game. **H** or the 🎮 button shows and hides it. In fullscreen it starts hidden (H brings it back), and a menu bar at the top shows the main shortcuts with buttons for controls, view, sound, pause, and leaving fullscreen.
+A large **controls panel**, by default hanging half over the left edge of the game, lists every key, with the altitude keys highlighted; keys light up while you hold them. Drag it by its header anywhere, even beside the game. **H** or the 🎮 button shows and hides it. In fullscreen it starts hidden (H brings it back), and a menu bar at the top shows the main shortcuts with buttons for controls, view, sound, pause, and leaving fullscreen.
 
 **Bee view** puts the camera on your bee's head, with its antennae and wing tips at the edge of the view. Click the garden to steer with the mouse (pointer lock; **Esc** releases it) or drag to look. **W** flies where you look, so looking down and pressing W dives; **A/D** strafe, **←/→** turn, Space/C still climb and sink. Boost widens the view.
 

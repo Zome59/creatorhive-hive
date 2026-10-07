@@ -132,3 +132,9 @@ main { padding: 12px 12px 6px; }
 /* Fullscreen shows the game area edge to edge. */
 .arena:fullscreen { height: 100dvh; max-height: none; border: 0; border-radius: 0; }
 .arena:-webkit-full-screen { width: 100%; height: 100%; border: 0; border-radius: 0; }
+/* Long help text in the shared dialog. */
+dialog .guide { max-height: min(62vh, 560px); overflow: auto; padding-right: 6px; }
+dialog .guide h3 { margin: 16px 0 4px; font-size: 12px; color: var(--green); letter-spacing: .4px; }
+dialog .guide p { margin: 0 0 8px; line-height: 1.7; }
+dialog .guide kbd { margin-right: 3px; }
+dialog:has(.guide) { max-width: 560px; }

@@ -23,9 +23,12 @@ test('the landing screen shows captions and action, pulses the play button at th
     globalThis.window = browserWindow; globalThis.document = browserWindow.document; globalThis.matchMedia = () => ({ matches: false });
     browserWindow.HTMLCanvasElement.prototype.getContext = () => ({ fillRect() {}, fillText() {}, beginPath() {}, roundRect() {}, fill() {} });
     const container = document.createElement('div'); document.body.appendChild(container);
-    const hive = hiveModule.create({ renderer: { domElement: document.createElement('canvas'), render() {} }, container, notify() {}, openDialog() {}, closeDialog() {} });
+    const dialogs = [];
+    const hive = hiveModule.create({ renderer: { domElement: document.createElement('canvas'), render() {} }, container, notify() {}, openDialog(html) { dialogs.push(html); }, closeDialog() {} });
     hive.activate(); hive.resize(800, 600); hive.update(0.05, 0);
     const caption = container.querySelector('#tour-caption'), start = container.querySelector('#start');
+    container.querySelector('#tour-info').click();
+    assert.match(dialogs.at(-1), /FULL GUIDE[\s\S]*Nectar power[\s\S]*The bumblebee/, 'the info button opens the full guide');
     assert.match(caption.textContent, /Welcome to the honey garden/); assert.equal(start.classList.contains('pulse'), false);
     let time = 0; for (; time < 21; time += 0.1) hive.update(0.1, time);
     assert.match(caption.textContent, /Beware the bumblebee/);
@@ -33,6 +36,8 @@ test('the landing screen shows captions and action, pulses the play button at th
     assert.match(caption.textContent, /Let’s go!/); assert.ok(start.classList.contains('pulse'), 'play button pulses');
     start.click(); hive.update(0.05, time);
     assert.equal(caption.hidden, true); assert.equal(start.classList.contains('pulse'), false);
+    container.querySelector('#guide').click();
+    assert.equal(container.querySelector('#pause').getAttribute('aria-label'), 'Resume game', 'opening the guide in a round pauses it');
     hive.deactivate();
   } finally {
     for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }

@@ -265,3 +265,20 @@
 .garden-ui .mission-status .progress-track { position: relative; }
 .garden-ui #player-progress { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #ff7a1a; transition: width .2s; }
 .garden-ui .your-share { color: #ff9a4a; font-size: 9px; letter-spacing: .4px; }
+
+/* Larger controls panel. */
+.garden-ui .controls-panel { width: 272px; padding: 12px 14px 14px; font-size: 12px; box-shadow: 0 10px 34px #0008; }
+.garden-ui .controls-panel header { font-size: 10px; margin-bottom: 8px; }
+.garden-ui .controls-panel kbd { padding: 4px 8px; font-size: 11px; }
+.garden-ui .control-row { padding: 6px 0; gap: 10px; }
+.garden-ui .control-row small { font-size: 10px; }
+.garden-ui .mixer summary { font-size: 12px; }
+.garden-ui .mix-row > span, .garden-ui .mix-row output { font-size: 10px; }
+.garden-ui #mixer-reset, .garden-ui .mix-row select { font-size: 11px; }
+@media (max-width: 760px) {
+.garden-ui .controls-panel { width: 236px; font-size: 11px; }
+
+}
+/* Full guide: info button in the tour caption and the HUD, and the guide dialog content. */
+.garden-ui .tour-caption .tour-info { position: absolute; top: 10px; right: 10px; pointer-events: auto; display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--green); border-radius: 3px; background: var(--panel); color: var(--green); font-size: 10px; letter-spacing: .4px; }
+.garden-ui .tour-caption .tour-info:hover { background: var(--green); color: #17140f; }
