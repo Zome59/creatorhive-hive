@@ -4,19 +4,30 @@ import { createWasp, WASP as SHAPE } from './wasp-model.js';
 import { createDizzyStars } from './models.js';
 import { OBSTACLES, contact } from '../world.js';
 
-// For the knock-out shot: of eight directions around the wasp, the one nearest the preferred one whose line of
-// sight is not blocked by a tree, flower or bush (sampled along the line, keeping half a metre of air).
+// Is the line of sight between two points free of trees, flowers and bushes (half a metre of air)?
+export function lineClear(from, to, standing = () => true) {
+  for (let k = 1; k < 12; k++) {
+    const t = k / 12, x = from.x + (to.x - from.x) * t, y = from.y + (to.y - from.y) * t, z = from.z + (to.z - from.z) * t;
+    for (const o of OBSTACLES) if (o.kind !== 'hive' && standing(o) && Math.abs(o.x - x) < 5 && Math.abs(o.z - z) < 5 && contact(o, x, y, z).gap < 0.5) return false;
+  }
+  return true;
+}
+// For the knock-out shot: of eight directions around the wasp, the one nearest the preferred one with a clear view.
 export function clearShot(w, preferred, { distance = 8, height = 3.6, standing = () => true } = {}) {
   for (const step of [0, 1, -1, 2, -2, 3, -3, 4]) {
-    const a = preferred + step * Math.PI / 4, ex = w.x + Math.sin(a) * distance, ez = w.z + Math.cos(a) * distance;
-    let blocked = false;
-    for (let k = 1; k < 12 && !blocked; k++) {
-      const t = k / 12, x = ex + (w.x - ex) * t, y = height + (0.8 - height) * t, z = ez + (w.z - ez) * t;
-      for (const o of OBSTACLES) if (o.kind !== 'hive' && standing(o) && Math.abs(o.x - x) < 5 && Math.abs(o.z - z) < 5 && contact(o, x, y, z).gap < 0.5) { blocked = true; break; }
-    }
-    if (!blocked) return a;
+    const a = preferred + step * Math.PI / 4;
+    if (lineClear({ x: w.x + Math.sin(a) * distance, y: height, z: w.z + Math.cos(a) * distance }, { x: w.x, y: 0.8, z: w.z }, standing)) return a;
   }
   return preferred;
+}
+// For the climb: from inside the rim, a little to one side, with a clear view of the edge where the claws appear.
+export function climbEye(angle, standing = () => true) {
+  const ox = Math.sin(angle), oz = Math.cos(angle), r = WASP.rim - 9, edge = { x: ox * WASP.rim, y: 0.4, z: oz * WASP.rim };
+  for (const side of [3.2, -3.2, 1.6, -1.6, 0, 5, -5]) {
+    const eye = { x: ox * r - oz * side, y: 2.2, z: oz * r + ox * side };
+    if (lineClear(eye, edge, standing)) return eye;
+  }
+  return { x: ox * r - oz * 3.2, y: 2.2, z: oz * r + ox * 3.2 };
 }
 
 // Scene side of the boss fight: places and poses the wasp model for every phase of the simulation, shows the
@@ -37,7 +48,7 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
   const climbQ = new THREE.Quaternion(), flyQ = new THREE.Quaternion(), spin = new THREE.Quaternion(), basis = new THREE.Matrix4();
   const xAxis = new THREE.Vector3(), out = new THREE.Vector3(), X = new THREE.Vector3(1, 0, 0), euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const fleeEye = new THREE.Vector3(), fleeLook = new THREE.Vector3();
-  let knockout = null; // the camera direction chosen for the knock-out shot
+  let knockout = null, climb = null; // camera spots chosen once per shot
   const eye = new THREE.Vector3(), look = new THREE.Vector3(), mix = new THREE.Vector3(), lookMix = new THREE.Vector3(), swarmAt = new THREE.Vector3();
   // Hit flash: every material with an emissive colour glows red for a moment when a slam lands.
   const flashing = [], RED = new THREE.Color('#ff1a1a');
@@ -124,8 +135,7 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
       if (w) {
         const h = waspHead(w), ox = Math.sin(w.angle ?? 0), oz = Math.cos(w.angle ?? 0);
         if (w.phase === 'climb' || w.phase === 'flip') { // from inside the rim, looking out at the claws coming over the edge
-          const r = WASP.rim - 9, side = 3.2;
-          eye.set(ox * r - oz * side, 2.2, oz * r + ox * side);
+          climb ??= climbEye(w.angle ?? 0, o => game.standing(o)); eye.set(climb.x, climb.y, climb.z);
           look.set(w.phase === 'climb' ? ox * WASP.rim : w.x, w.phase === 'climb' ? 0.4 : w.y, w.phase === 'climb' ? oz * WASP.rim : w.z);
           want = 1; fov = 44;
         } else if (w.swarm === 'charging') { // ride behind the swarm as it flies at the wasp
@@ -150,7 +160,7 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
         }
         void h;
       }
-      if (!w) knockout = null;
+      if (!w) knockout = climb = null;
       if (!w && twinkleT > 0) { eye.copy(fleeEye); look.copy(fleeLook).lerp(twinkle.position, 0.6); want = 1; fov = 44; } // hold on the ping in the sky
       camWeight += (want - camWeight) * Math.min(1, dt * (want ? 2.6 : 1.8));
       if (want) cineFov = fov;

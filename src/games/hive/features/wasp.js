@@ -1,4 +1,4 @@
-import { WORLD } from '../world.js';
+import { WORLD, TREES } from '../world.js';
 
 // The final boss: a wasp that climbs over the island's rim near the end of the round and hunts the scouts.
 // The player rallies the remaining scouts into a swarm (gather, attack formation, attack), the swarm mobs the
@@ -34,8 +34,16 @@ const playerOf = game => [...game.players.values()].find(p => !p.bot);
 export function scheduleWasp(game) {
   game.wasp = null; game.waspDone = !game.boss; game.cheer = 0; // switched off in the game settings: no boss this round
   game.waspAt = WASP.spawnLeft + (game.random() * 2 - 1) * WASP.jitter;
-  game.waspAngle = game.random() * Math.PI * 2;
+  game.waspAngle = betweenRimTrees(game.random() * Math.PI * 2);
   for (const p of game.players.values()) Object.assign(p, { ko: false, caught: false, swarmSlot: -1, slam: 0 });
+}
+// It climbs up in the gap between two of the trees that ring the island's edge, never right behind a trunk.
+const RIM_TREES = TREES.filter(t => !t.inside).map(t => Math.atan2(t.x, t.z)).sort((a, b) => a - b);
+export function betweenRimTrees(angle) {
+  if (RIM_TREES.length < 2) return angle;
+  const a = Math.atan2(Math.sin(angle), Math.cos(angle)), i = RIM_TREES.findIndex(t => t > a);
+  const before = i <= 0 ? RIM_TREES.at(-1) - (i === 0 ? Math.PI * 2 : 0) : RIM_TREES[i - 1], after = i < 0 ? RIM_TREES[0] + Math.PI * 2 : RIM_TREES[i];
+  return (before + after) / 2;
 }
 // While the boss is on the island the round clock waits.
 export const waspActive = game => !!game.wasp;

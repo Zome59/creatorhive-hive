@@ -129,3 +129,17 @@ test('the knock-out shot looks past trees: a view through a canopy is swapped fo
   const a = clearShot(w, through);
   assert.ok(!blocked(a), 'the chosen view is clear'); assert.notEqual(a, through);
 });
+
+test('the wasp climbs up between the rim trees, and the climb camera has a clear view of the edge', async () => {
+  const { betweenRimTrees, WASP } = await import('../../src/games/hive/features/wasp.js');
+  const { climbEye, lineClear } = await import('../../src/games/hive/features/wasp-boss.js');
+  const { TREES } = await import('../../src/games/hive/world.js');
+  const rim = TREES.filter(t => !t.inside);
+  for (let k = 0; k < 64; k++) {
+    const a = betweenRimTrees(k / 64 * Math.PI * 2), x = Math.sin(a) * WASP.rim, z = Math.cos(a) * WASP.rim;
+    const nearest = Math.min(...rim.map(t => Math.hypot(t.x - x, t.z - z)));
+    assert.ok(nearest > 2.5, `climb spot ${a.toFixed(2)} is ${nearest.toFixed(1)} m from the nearest rim tree`);
+    const eye = climbEye(a);
+    assert.ok(lineClear(eye, { x, y: 0.4, z }), `clear view of the edge at ${a.toFixed(2)}`);
+  }
+});

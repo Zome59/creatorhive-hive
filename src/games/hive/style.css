@@ -258,6 +258,8 @@
 @keyframes garden-bars { from { height: 0; } }
 .garden-ui .arena-top, .garden-ui .flight-hud, .garden-ui .controls-panel, .garden-ui .mobile-controls, .garden-ui .bumble-marker { transition: opacity .3s; }
 .garden-ui.cinematic .arena-top, .garden-ui.cinematic .flight-hud, .garden-ui.cinematic .controls-panel, .garden-ui.cinematic .mobile-controls, .garden-ui.cinematic .bumble-marker, .garden-ui.cinematic .reticle, .garden-ui.cinematic .bumble-alert, .garden-ui.cinematic .load-tip, .garden-ui.cinematic .power-tip { opacity: 0; pointer-events: none; }
+/* The hints fade in with an animation, which would override the opacity above. */
+.garden-ui.cinematic .load-tip, .garden-ui.cinematic .power-tip { visibility: hidden; }
 @media (max-width: 480px) {
 .garden-ui .letterbox strong { font-size: 15px; }
 

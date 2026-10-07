@@ -111,6 +111,8 @@ Touch devices show directional, climb/sink, boost, and speed buttons; drag the g
 
 ### Demo
 
+Screenshots of every event and view: [docs/screenshots](docs/screenshots/README.md).
+
 **▶ Watch the demo · 1½ min** on the landing screen plays a round by itself for about a minute and a half, at an easy pace with a few seconds of plain nectar collecting between the events: the start flight, then a bee token (with its camera ride, collected in speed mode, five helpers crawl out), a power boost through a tree, and the bumblebee crossing the garden or raiding the hive, in a random order, with the rain cloud and a wilting flower somewhere in between. The finale is the wasp: the swarm gathers and attacks (sometimes with defender bees), the bee butt-slams its head, and the wasp reels off before the goal party; or, now and then, the wasp breaks through and the hive is WASTED. A badge at the top shows the time and what is happening; **Esc** or **✕ End** stops it, **P** pauses. Afterwards the landing screen is back; scores and the session best are untouched.
 
 ### Messages

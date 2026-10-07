@@ -81,7 +81,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (!renderer || started) return;
     demoSaved = { best: game.best, scores: game.scores };
     $('start').click(); if (!started || !player) return;
-    demo = createDemo(game, player); root.classList.add('demo'); $('demo-badge').hidden = false;
+    demo = createDemo(game, player); root.classList.add('demo'); $('demo-badge').hidden = false; demoSaved.radius = orbit.radius;
   }
   function stopDemo() {
     if (!demo) return;
@@ -94,7 +94,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     root.classList.remove('flyover', 'cinematic', 'powered', 'top-busy', 'bee-view');
     $('pause').textContent = 'Ⅱ'; $('pause').disabled = true; $('view').disabled = true; $('phase').textContent = 'READY';
     $('intro').hidden = false; $('flight-hud').hidden = true; $('tour-caption').hidden = false; tour.reset(); tourStep = -1;
-    camera.fov = ORBIT_FOV; camera.updateProjectionMatrix();
+    camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); orbit.radius = demoSaved.radius ?? orbit.radius;
     soundscape.reset(); if (audio.enabled) audio.setMix(INTRO_MIX, 1);
     updateUI();
   }
@@ -888,6 +888,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     } else {
       // The garden view keeps your bee in the centre (plus a pan offset while you drag, which eases back).
       if (!orbit.panning) orbit.settle(paused ? 0 : dt);
+      // The demo films a little closer than the default view, and closer still while the wasp is fought.
+      if (demo && !paused) orbit.radius += ((game.wasp ? 22 : 30) - orbit.radius) * Math.min(1, dt * 1.2);
       orbitTarget.lerp(probe.set(player ? player.x + orbit.panX : 0, player ? player.y : 0, player ? player.z + orbit.panZ : 0), 1 - Math.exp(-dt * 8));
       orbit.apply(camera, orbitTarget);
       if (game.celebration) {
