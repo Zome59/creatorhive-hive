@@ -26,6 +26,7 @@ import { createTour } from './features/tour.js';
 import { GUIDE_HTML } from './features/guide.js';
 import { createCinematic, CINEMATIC_LENGTH } from './features/cinematic.js';
 import { createReactions } from './features/speech/reactions.js';
+import { createDemo } from './features/demo.js';
 
 const ORBIT_FOV = 38;
 
@@ -73,6 +74,31 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (reducedMotion || view === 'bee') { spotlight = SPOTLIGHT; bubbles.say(player.id, 'That\u2019s you!', { delay: 0.6 }); startTip(); }
     else { flyover = 0; saidHi = false; orbit.azimuth = FLY.to; game.cutscene = FLY.circle + FLY.swoop + FLY.hold; root.classList.add('flyover'); }
   };
+  // Demo mode: the normal round start, then a director and a pilot play about a minute of it, and it returns here.
+  // Scores and the session best stay untouched.
+  let demo = null, demoSaved = null;
+  function startDemo() {
+    if (!renderer || started) return;
+    demoSaved = { best: game.best, scores: game.scores };
+    $('start').click(); if (!started || !player) return;
+    demo = createDemo(game, player); root.classList.add('demo'); $('demo-badge').hidden = false;
+  }
+  function stopDemo() {
+    if (!demo) return;
+    demo = null; root.classList.remove('demo'); $('demo-badge').hidden = true;
+    endCinematic(); endTokenShot(); bubbles.clear(); resetBoss(); modal.close();
+    game.reset(); game.round = 1; game.best = demoSaved.best; game.scores = demoSaved.scores;
+    if (player) game.players.delete(player.id);
+    player = null; started = false; paused = false; autoPaused = false; spotlight = 0; flyover = -1; strafe = 0;
+    lastRound = game.round; lastResult = null; scoresDue = false; heistNote = null; alertTime = 0; release();
+    root.classList.remove('flyover', 'cinematic', 'powered', 'top-busy', 'bee-view');
+    $('pause').textContent = 'Ⅱ'; $('pause').disabled = true; $('view').disabled = true; $('phase').textContent = 'READY';
+    $('intro').hidden = false; $('flight-hud').hidden = true; $('tour-caption').hidden = false; tour.reset(); tourStep = -1;
+    camera.fov = ORBIT_FOV; camera.updateProjectionMatrix();
+    soundscape.reset(); if (audio.enabled) audio.setMix(INTRO_MIX, 1);
+    updateUI();
+  }
+  $('demo').onclick = startDemo; $('demo-exit').onclick = stopDemo;
   // On the landing screen a click anywhere in the garden starts the round, not only the ▶ button.
   let pressAt = null;
   renderer.domElement.addEventListener('pointerdown', event => { pressAt = { x: event.clientX, y: event.clientY }; if (flyover >= 0 && flyover < FLY.circle + FLY.swoop) skipFlyover(); });
@@ -205,6 +231,12 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (e.target?.closest?.('input, select, textarea')) return; // Arrow keys adjust a focused slider, not the bee.
     if (e.code === 'KeyF' && !e.repeat) { e.preventDefault(); fullscreen(); return; }
     if (e.code === 'KeyH' && !e.repeat) { setPanel(!panelOpen); return; }
+    if (demo) {
+      if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); stopDemo(); }
+      else if (e.code === 'KeyP' && !e.repeat) togglePause();
+      else if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      return;
+    }
     if (e.code === 'Enter' && !started && !e.repeat && e.target === document.body) { $('start').click(); return; }
     if (cinematic.active && ['Enter', 'Escape', 'Space'].includes(e.code)) { e.preventDefault(); endCinematic(); return; }
     if (tokenShot >= 0 && ['Enter', 'Escape'].includes(e.code)) { e.preventDefault(); endTokenShot(); return; }
@@ -513,7 +545,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   }
   // ---- boss fight glue: swarm commands, prompts, and the WASTED ending
   function swarmTap() {
-    const w = game.wasp; if (!w || !started) return;
+    const w = game.wasp; if (!w || !started || demo) return;
     const now = performance.now(); swarmTaps = swarmTaps.filter(t => now - t < 1200); swarmTaps.push(now);
     if (swarmTaps.length < 3) return;
     swarmTaps = [];
@@ -521,10 +553,10 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (command) game.waspCommand(command);
   }
   // Bee tokens: B (or the buttons) calls five bees out of the hive; during the wasp fight they come as defenders.
-  function callBees() { if (started && player && game.redeemBeeItem()) $('defender-call').hidden = true; }
+  function callBees() { if (started && player && !demo && game.redeemBeeItem()) $('defender-call').hidden = true; }
   $('defender-call').onclick = callBees;
   $('touch-bees').addEventListener('pointerdown', event => { event.preventDefault(); callBees(); });
-  function swarmAttack() { if (game.waspCommand('attack')) $('swarm-attack').hidden = true; }
+  function swarmAttack() { if (!demo && game.waspCommand('attack')) $('swarm-attack').hidden = true; }
   $('swarm-attack').onclick = swarmAttack;
   $('touch-swarm').addEventListener('pointerdown', event => { event.preventDefault(); swarmTap(); });
   for (const button of root.querySelectorAll('[data-key="Space"]')) button.addEventListener('pointerdown', () => { if (player && game.slamReady(player)) slamTap = true; });
@@ -642,7 +674,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       const heavy = player.bag >= LOAD.heavy; $('bag-label').textContent = heavy ? `YOUR NECTAR · HEAVY −${Math.round((1 - loadFactor(player.bag)) * 100)}%` : 'YOUR NECTAR'; $('bag-label').classList.toggle('heavy', heavy);
       lastBag = player.bag; lastScore = player.score;
     }
-    if (started && game.result && game.result !== lastResult) { $('phase').textContent = 'RESETTING'; scoresDue = true; }
+    if (started && game.result && game.result !== lastResult) { $('phase').textContent = 'RESETTING'; scoresDue = !demo; }
+    if (demo) { const s = Math.floor(demo.time); $('demo-time').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; $('demo-label').textContent = demo.label; }
     // After a win the party plays for a few seconds before the highscore table covers it.
     if (scoresDue && game.result && RULES.break - game.remaining >= (game.result === 'complete' ? 6 : game.result === 'wasted' ? 5.5 : 0.4)) { scoresDue = false; showScores(); }
     if (game.round !== lastRound && pendingBoss !== null) { applyBoss(pendingBoss); pendingBoss = null; }
@@ -762,12 +795,13 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (!active) return;
     let ticked = false;
     if (!paused) {
-      if (player) { const move = modal.open ? { x: 0, y: 0, z: 0 } : input(dt); strafe = move.strafe ?? 0; game.setInput(player.id, move); }
+      if (player) { const move = demo ? demo.update(dt) : modal.open ? { x: 0, y: 0, z: 0 } : input(dt); strafe = move.strafe ?? 0; game.setInput(player.id, move); }
       game.tick(dt); ticked = true;
       // Keep the landing screen's world alive without using up its first round.
       if (!started) { game.remaining = game.duration; if (game.result) game.reset(); }
     }
     if (ticked) handle(game.events, dt);
+    if (ticked && demo) { demo.observe(game.events); if (demo.done) stopDemo(); }
     for (const p of game.players.values()) {
       if (!beeModels.has(p.id)) createBee(p);
       const bee = beeModels.get(p.id), own = p === player;
