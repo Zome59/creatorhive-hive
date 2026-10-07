@@ -245,3 +245,23 @@
 .garden-ui .load-tip { bottom: 150px; flex-wrap: wrap; justify-content: center; font-size: 10px; }
 
 }
+
+/* Bumblebee entrance cutscene: letterbox bars, a comic title card, and the HUD steps aside. */
+.garden-ui .letterbox { position: absolute; inset: 0; z-index: 1150; pointer-events: none; }
+.garden-ui .letterbox i { position: absolute; left: 0; right: 0; height: 11%; background: #050604; animation: garden-bars .45s ease-out both; }
+.garden-ui .letterbox i:first-child { top: 0; }
+.garden-ui .letterbox i:nth-child(2) { bottom: 0; }
+.garden-ui .letterbox strong { position: absolute; left: 50%; bottom: 13%; transform: translateX(-50%) rotate(-2deg); padding: 8px 18px; background: #ffd23f; color: #241800; font: 900 22px/1 Impact, "Arial Black", "Comic Sans MS", sans-serif; letter-spacing: .6px; text-transform: uppercase; box-shadow: 4px 4px 0 #17140f; white-space: nowrap; animation: garden-tip .5s .3s cubic-bezier(.2, 1.5, .4, 1) both; }
+.garden-ui .letterbox small { position: absolute; right: 18px; bottom: 3.5%; color: #ffffff88; font-size: 9px; letter-spacing: .6px; }
+@keyframes garden-bars { from { height: 0; } }
+.garden-ui .arena-top, .garden-ui .flight-hud, .garden-ui .controls-panel, .garden-ui .mobile-controls, .garden-ui .bumble-marker { transition: opacity .3s; }
+.garden-ui.cinematic .arena-top, .garden-ui.cinematic .flight-hud, .garden-ui.cinematic .controls-panel, .garden-ui.cinematic .mobile-controls, .garden-ui.cinematic .bumble-marker, .garden-ui.cinematic .reticle, .garden-ui.cinematic .bumble-alert { opacity: 0; pointer-events: none; }
+@media (max-width: 480px) {
+.garden-ui .letterbox strong { font-size: 15px; }
+
+}
+
+/* Your share of the hive honey, in the same orange as your honeycomb cells. */
+.garden-ui .mission-status .progress-track { position: relative; }
+.garden-ui #player-progress { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #ff7a1a; transition: width .2s; }
+.garden-ui .your-share { color: #ff9a4a; font-size: 9px; letter-spacing: .4px; }

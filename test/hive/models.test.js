@@ -77,7 +77,12 @@ test('honey drop hit mid-pop regrows from its current size, and a drop that star
 
 test('bumblebee: big, chubby, faces +Z, fuzzy, within the triangle budget', t => {
   const bee = createBumblebee(), { group } = bee, s = size(group);
-  assert.ok(triangles(group) < 20000); t.diagnostic(`bumblebee triangles: ${triangles(group)}`);
+  // The base model stays within budget; shell fur is counted separately because the scene scales its layers with distance.
+  const bumble = createBumblebee(), shells = bumble.fur, furTris = triangles(shells);
+  const base = triangles(bumble.group) - furTris;
+  assert.ok(base < 20000); t.diagnostic(`bumblebee triangles: ${base} + shell fur ${furTris} at full detail`);
+  shells.userData.setLayers(8); assert.equal(shells.count, 8); assert.ok(triangles(shells) <= furTris / 4 + 1, 'fewer layers, fewer triangles');
+  shells.userData.setLayers(0); assert.equal(shells.visible, false);
   assert.ok(s.x > 1.2 && s.x < 2.2 && s.y > 1.2 && s.y < 2.0 && s.z > 2 && s.z < 3, `size ${s.x} ${s.y} ${s.z}`);
   const eyes = [...named(group, 'eye-1'), ...named(group, 'eye1')]; assert.equal(eyes.length, 2);
   for (const eye of eyes) assert.ok(world(eye).z > 0.8, 'eyes face forward (+Z)'); assert.ok(world(eyes[0]).x * world(eyes[1]).x < 0);

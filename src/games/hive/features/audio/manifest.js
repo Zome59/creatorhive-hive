@@ -3,7 +3,7 @@
 // `variants: n` means files `<name>-1.mp3` … `<name>-n.mp3`; one is picked at random per play.
 // `bus` is the sound mixer channel the sound plays through. `lazy` files load only when first needed.
 export const HIVE_SOUNDS = Object.freeze([
-  { name: 'buzz', loop: true, gain: 0.3, bus: 'bees' },
+  { name: 'buzz', loop: true, gain: 0.15, bus: 'bees' },
   { name: 'bumble', loop: true, gain: 0.9, bus: 'bumblebee' },
   { name: 'garden', loop: true, gain: 0.07, bus: 'ambience' },
   { name: 'pass', gain: 0.9, bus: 'bees' },
@@ -18,7 +18,7 @@ export const HIVE_SOUNDS = Object.freeze([
   { name: 'dizzy', gain: 0.4, bus: 'effects' },
   { name: 'slurp', gain: 0.55, bus: 'bumblebee' },
   { name: 'music-synthwave', loop: true, gain: 0.075, bus: 'music', lazy: true },
-  { name: 'music-chill', loop: true, gain: 0.095, bus: 'music', lazy: true },
+  { name: 'music-meadow', loop: true, gain: 0.16, bus: 'music', lazy: true },
 ]);
 export const soundFiles = sound => sound.variants ? Array.from({ length: sound.variants }, (_, i) => `${sound.name}-${i + 1}`) : [sound.name];
 // Sound mixer channels, in the order the controls panel shows them. Levels go from 0 to 150 %.
@@ -32,6 +32,6 @@ export const MIXER = Object.freeze([
   { id: 'ambience', label: 'Garden ambience' },
   { id: 'music', label: 'Music' },
 ].map(Object.freeze));
-// Background music choices; the default plays quietly once the game starts.
-export const MUSIC_TRACKS = Object.freeze([{ id: 'music-synthwave', label: 'Synthwave' }, { id: 'music-chill', label: 'Chill-out' }, { id: 'off', label: 'Off' }].map(Object.freeze));
+// Background choices; the default is the pure nature soundscape, played quietly once the game starts.
+export const MUSIC_TRACKS = Object.freeze([{ id: 'music-meadow', label: 'Summer meadow' }, { id: 'music-synthwave', label: 'Synthwave' }, { id: 'off', label: 'Off' }].map(Object.freeze));
 export const MIX_MAX = 1.5;

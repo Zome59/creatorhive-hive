@@ -4,10 +4,12 @@ const PASS = 2.8;
 
 export function createSoundscape(audio, { random = Math.random } = {}) {
   const passes = new Map();
-  let slurp = 0;
+  let slurp = 0, clock = 0, lastVoice = -9;
+  const VOICE_GAP = 1.8, CHATTY = 0.6;
   const at = bee => ({ x: bee.x, y: bee.y, z: bee.z });
   return {
     frame(game, player, dt, { listener, beeView = false, music = 'off' } = {}) {
+      clock += dt;
       if (!audio.enabled) return;
       if (listener) audio.listen(listener);
       const keys = new Set(['garden']);
@@ -63,11 +65,13 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
       }
     },
     // Comic gibberish that goes with a speech bubble, from the speaking bee.
+    // Speech bubbles stay, but not every one gets a voice: a short gap between voices, and calm remarks only sometimes.
     voice(position, { delay = 0, angry = false, deep = false } = {}) {
-      if (!position) return;
+      if (!position || clock - lastVoice < VOICE_GAP || (!angry && !deep && random() > CHATTY)) return;
+      lastVoice = clock;
       // The bumblebee uses the same gibberish, pitched far down.
       audio.play('grumble', position, { delay, gain: deep ? 1.2 : 1, rate: deep ? 0.6 + random() * 0.08 : (angry ? 1.05 : 0.95) + random() * 0.2 });
     },
-    reset() { passes.clear(); },
+    reset() { passes.clear(); lastVoice = -9; },
   };
 }

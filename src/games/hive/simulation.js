@@ -35,6 +35,8 @@ export class Game {
     this.pairs = new Map();
     this.toppled = new Map();
     this.best = 0; this.scores = [];
+    // While a cutscene plays, the round clock stops and the player's bee waits safely.
+    this.cutscene = 0;
     scheduleBumblebee(this, RULES.goal);
     for (let i = 0; i < bots; i++) this.addPlayer(true);
   }
@@ -72,7 +74,8 @@ export class Game {
   tick(dt) {
     dt = clamp(dt, 0, 0.1);
     this.events = [];
-    this.remaining -= dt;
+    if (this.cutscene) this.cutscene = Math.max(0, this.cutscene - dt);
+    else this.remaining -= dt;
     if (this.remaining <= 0) {
       if (!this.result) this.finish();
       else this.reset();
@@ -93,7 +96,7 @@ export class Game {
     const wasBoosting = this.boosting(p);
     p.boost = Math.max(0, p.boost - dt);
     if (p.bot) this.steer(p, dt);
-    let input = p.idle > 0.5 && !p.bot ? { x: 0, y: 0, z: 0, dash: false } : p.input;
+    let input = (p.idle > 0.5 || this.cutscene) && !p.bot ? { x: 0, y: 0, z: 0, dash: false } : p.input;
     if (p.stun) input = { ...input, x: input.x * (p.bot ? 0 : 0.3), y: input.y * (p.bot ? 0 : 0.3), z: input.z * (p.bot ? 0 : 0.3), dash: false };
     // Bouncing off something heavy: steering barely works for a moment.
     else if (p.recoil) input = { ...input, x: input.x * 0.15, y: input.y * 0.15, z: input.z * 0.15 };
@@ -259,7 +262,7 @@ export class Game {
     if (this.bumble) { this.bumble = null; this.emit({ type: 'bumble-leave' }); }
   }
   reset() {
-    this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.cooldowns.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = [];
+    this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.cooldowns.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
     scheduleBumblebee(this, RULES.goal);
     for (const p of this.players.values()) {
       Object.assign(p, home(p.id), { score: 0, points: 0, bag: 0, boost: 0, power: 0, powered: false, kx: 0, ky: 0, kz: 0, vx: 0, vy: 0, vz: 0, stun: 0, angry: 0, fume: 0 });

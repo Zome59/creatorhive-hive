@@ -78,3 +78,14 @@ test('the sound mixer scales master and each channel, clamps levels, and resets 
   audio.setLevel('nope', 0.2); assert.equal(audio.level('nope'), 1);
   audio.resetLevels(); assert.ok(MIXER.every(channel => audio.level(channel.id) === 1)); assert.ok(Math.abs(master.gain.value - 0.85) < 1e-9);
 });
+test('gibberish voices are spaced out and calm remarks only sometimes get one', async () => {
+  const played = [], audio = { enabled: true, play: (name, at, options) => { played.push(name); return true; }, listen() {}, loop() {}, keep() {} };
+  let roll = 0.9; const soundscape = createSoundscape(audio, { random: () => roll });
+  const game = new Game({ bots: 1 }), player = game.addPlayer(), at = { x: 1, y: 2, z: 3 };
+  soundscape.frame(game, player, 0.05, {});
+  soundscape.voice(at); assert.equal(played.length, 0, 'calm remark skipped on a high roll');
+  roll = 0.1; soundscape.voice(at); assert.equal(played.length, 1);
+  soundscape.voice(at, { angry: true }); assert.equal(played.length, 1, 'too soon after the last voice');
+  for (let i = 0; i < 40; i++) soundscape.frame(game, player, 0.05, {});
+  roll = 0.9; soundscape.voice(at, { angry: true }); assert.equal(played.length, 2, 'shouts always get a voice once the gap has passed');
+});

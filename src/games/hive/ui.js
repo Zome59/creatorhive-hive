@@ -1,5 +1,6 @@
 export const markup = `
         <div class="tour-cover garden-only" id="tour-cover" aria-hidden="true"></div>
+        <div class="letterbox garden-only" id="letterbox" hidden><i></i><i></i><strong id="cine-title"></strong><small>Enter or click to skip</small></div>
         <div class="speech-layer garden-only" id="speech" aria-hidden="true"></div>
         <div class="tour-caption garden-only" id="tour-caption" aria-live="polite"><small id="tour-step"></small><strong id="tour-title"></strong><span id="tour-text"></span><div class="tour-dots" id="tour-dots" aria-hidden="true"></div></div>
         <div class="bumble-alert garden-only" id="bumble-alert" hidden><div class="alert-banner" role="alert"><strong>⚠ ALERT</strong><span id="alert-text">BUMBLEBEE INCOMING</span><em id="alert-count">4</em></div></div>
@@ -10,7 +11,7 @@ export const markup = `
         <aside class="controls-panel garden-only" id="controls-panel" aria-label="Controls"><header id="controls-grip" title="Drag to move"><span>⠿ CONTROLS</span><button id="controls-close" title="Hide controls (H)" aria-label="Hide controls">×</button></header><div id="controls-list"></div><details class="mixer" id="mixer"><summary>🎚 Sound mixer</summary><div id="mixer-list"></div><button id="mixer-reset" title="Set every slider back to 100 %">↺ Reset to default</button></details></aside>
         <div class="arena-top garden-only">
           <div class="world-title"><span class="live-dot"></span> HONEY RETRIEVAL<small>ROUND <span id="round">01</span></small></div>
-          <div class="mission-status" id="mission-status"><div><span>HIVE</span><strong id="honey">0</strong><span>/ 300</span><span id="percent">0%</span></div><div class="progress-track"><i id="honey-progress"></i></div></div>
+          <div class="mission-status" id="mission-status"><div><span>HIVE</span><strong id="honey">0</strong><span>/ 300</span><span id="your-share" class="your-share"></span><span id="percent">0%</span></div><div class="progress-track"><i id="honey-progress"></i><b id="player-progress"></b></div></div>
           <div class="round-clock"><span id="phase">READY</span><strong id="timer">3:00</strong></div>
           <div class="arena-actions"><button id="controls-toggle" title="Show or hide controls (H)" aria-label="Hide controls" aria-pressed="true">🎮</button><button id="view" title="Switch to bee view (V)" aria-label="Switch to bee view" aria-pressed="false">👁 <span>Bee view</span></button><button id="sound" title="Toggle sound" aria-label="Disable sound" aria-pressed="true">♪ <span>Sound on</span></button><button id="fullscreen" title="Fullscreen (F)" aria-label="Toggle fullscreen">⛶</button><button id="pause" title="Pause game" aria-label="Pause game" disabled>Ⅱ</button></div>
         </div>

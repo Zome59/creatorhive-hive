@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Game, RULES, BOOST, HEIST, POWER, SHOVE, LOAD, loadFactor } from './simulation.js';
 import { createPowerAura } from './features/power-aura.js';
+import { createShellFur } from './features/shell-fur.js';
+import { createHoneyGauge } from './features/honey-gauge.js';
 import { releaseBumblebee } from './features/bumblebee.js';
 import { WORLD, FLOWERS, TREES } from './world.js';
 import { markup } from './ui.js';
@@ -14,6 +16,7 @@ import { createSoundscape } from './features/audio/soundscape.js';
 import { createBubbles } from './features/speech/bubbles.js';
 import { isFullscreenOf } from './features/fullscreen-state.js';
 import { createTour } from './features/tour.js';
+import { createCinematic, CINEMATIC_LENGTH } from './features/cinematic.js';
 import { createReactions } from './features/speech/reactions.js';
 
 const ORBIT_FOV = 38;
@@ -153,6 +156,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (e.code === 'KeyF' && !e.repeat) { e.preventDefault(); fullscreen(); return; }
     if (e.code === 'KeyH' && !e.repeat) { setPanel(!panelOpen); return; }
     if (e.code === 'Enter' && !started && !e.repeat && e.target === document.body) { $('start').click(); return; }
+    if (cinematic.active && ['Enter', 'Escape', 'Space'].includes(e.code)) { e.preventDefault(); endCinematic(); return; }
     if (!started) return;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyP' && !e.repeat) togglePause();
@@ -213,6 +217,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   for (let i = 0; i < 1700; i++) { const a = random() * Math.PI * 2, r = 4.2 + Math.sqrt(random()) * 26; dummy.position.set(Math.cos(a) * r, 0.27, Math.sin(a) * r); dummy.rotation.set(random() * 0.2, a, random() * 0.3); dummy.scale.setScalar(0.7 + random()); dummy.updateMatrix(); grass.setMatrixAt(i, dummy.matrix); grass.setColorAt(i, new THREE.Color(palette.foliage[i % palette.foliage.length])); }
   scene.add(grass);
   const hive = createHiveModel(); scene.add(hive.group);
+  const gauge = createHoneyGauge(); scene.add(gauge.group);
   let hiveBeacon = 0;
   const pivots = new Map();
   const flowerModels = FLOWERS.map(f => {
@@ -237,6 +242,12 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   const burst = createBurst(scene);
 
   const beeModels = new Map();
+  // Soft shell fuzz for the honeybees: poles at head and tail, dark bands baked into the fur colour.
+  const fuzzSphere = new THREE.SphereGeometry(1, 20, 14).rotateX(Math.PI / 2);
+  const BANDS = [{ z: -0.385, width: 0.13, color: '#34352d' }, { z: 0.231, width: 0.13, color: '#34352d' }];
+  // Level of detail: fewer fur layers the farther the camera is (none when the bee is a dot).
+  const fuzzLayers = d => d < 6 ? 8 : d < 14 ? 6 : d < 26 ? 4 : 0;
+  const bumbleLayers = d => cinematic.active || !started ? 32 : d < 8 ? 24 : d < 18 ? 16 : d < 32 ? 10 : 6;
   function createBee(p) {
     const group = new THREE.Group(); scene.add(group);
     const body = new THREE.Group(); group.add(body);
@@ -247,6 +258,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     // Six thin legs; the hind legs carry pollen baskets that grow with the nectar load.
     for (const z of [0.2, 0.02, -0.16]) for (const side of [-1, 1]) { const leg = mesh(cylinder(0.02, 0.012, 0.3, 5), '#2f2d27', body, side * 0.17, -0.28, z); leg.rotation.set(z * 0.9, 0, side * 0.45); }
     const baskets = [-1, 1].map(side => { const basket = orb(body, '#f0a31c', side * 0.25, -0.41, -0.2, 1, 1.15, 1.3, { roughness: 0.32, emissive: '#7a4a00', emissiveIntensity: 0.3 }); basket.scale.setScalar(0.001); basket.visible = false; return basket; });
+    const fuzz = createShellFur(fuzzSphere, { layers: 8, length: 0.13, density: [70, 46], color: p.bot ? palette.bees[p.id % palette.bees.length] : '#ffd052', stripes: BANDS, rootShade: 0.62, droop: 0.12 });
+    fuzz.scale.set(0.32, 0.3, 0.52); body.add(fuzz);
     const wings = [];
     for (const side of [-1, 1]) { const wing = orb(body, p.bot ? palette.wings[p.id % palette.wings.length] : '#fff8e4', side * 0.36, 0.22, -0.06, 0.4, 0.035, 0.22, { transparent: true, opacity: 0.65, roughness: 0.3 }); wings.push(wing); }
     const shadow = mesh(new THREE.CircleGeometry(p.bot ? 0.35 : 0.5, 24), p.bot ? palette.bees[p.id % palette.bees.length] : '#f9d260', scene, 0, 0.08, 0, { transparent: true, opacity: 0.4 }); shadow.rotation.x = -Math.PI / 2; shadow.castShadow = false;
@@ -261,7 +274,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     const stars = createDizzyStars(); stars.group.position.y = 0.55; stars.group.visible = false; group.add(stars.group);
     const aura = p.bot ? null : createPowerAura(); if (aura) { body.add(aura.outline); group.add(aura.halo); }
     group.position.set(p.x, p.y, p.z);
-    beeModels.set(p.id, { group, body, wings, shadow, stem, stars, aura, baskets, load: 0, labelTexture, label, tumble: 0 });
+    beeModels.set(p.id, { group, body, wings, shadow, stem, stars, aura, fuzz, baskets, load: 0, labelTexture, label, tumble: 0 });
   }
   const bumble = createBumblebee(); bumble.group.visible = false; scene.add(bumble.group);
   const bumbleShadow = mesh(new THREE.CircleGeometry(1.1, 28), '#2a2a20', scene, 0, 0.08, 0, { transparent: true, opacity: 0.3 }); bumbleShadow.rotation.x = -Math.PI / 2; bumbleShadow.castShadow = false; bumbleShadow.visible = false;
@@ -312,7 +325,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     banner.classList.toggle('saved', !raid && heistNote.saved);
     if (raid) {
       $('heist-title').textContent = '🍯 HONEY THIEF!';
-      $('heist-text').textContent = b.phase === 'perched' ? `It's drinking your honey! Fly to the hive and bump into it ${HEIST.hits}×.` : 'The bumblebee is heading for the hive. Get ready to bump it off!';
+      $('heist-text').textContent = b.phase === 'perched' ? `It's drinking your honey! Fly to the hive and bump into it ${HEIST.hits}×.` : b.roamFor > 0 ? 'It\u2019s back, bumbling around and knocking bees over. Soon it goes for the honey!' : 'The bumblebee is heading for the hive. Get ready to bump it off!';
       $('heist-hits').innerHTML = Array.from({ length: HEIST.hits }, (_, i) => `<i class="${i < b.knocks ? 'hit' : ''}"></i>`).join('');
     } else {
       $('heist-title').textContent = heistNote.saved ? '🎉 HONEY SAVED!' : '🍯 HONEY STOLEN';
@@ -324,6 +337,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     const seconds = Math.max(0, Math.ceil(game.remaining)); $('timer').textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
     $('round').textContent = String(game.round).padStart(2, '0'); $('honey').textContent = game.honey;
     const percent = Math.min(100, Math.floor(game.honey / RULES.goal * 100)); $('honey-progress').style.width = `${percent}%`; $('percent').textContent = `${percent}%`;
+    // Your share of the hive's honey, shown in your colour on the same bar.
+    const mine = started ? gauge.player : 0; $('player-progress').style.width = `${Math.min(100, mine / RULES.goal * 100)}%`; $('your-share').textContent = started ? `YOU ${mine}` : '';
     if (player) {
       $('bag').innerHTML = Array.from({ length: RULES.capacity }, (_, i) => `<i class="${i < player.bag ? 'filled' : ''}"></i>`).join('') + `<strong>${player.bag}<span> / 8</span></strong>`;
       const recharge = BOOST.cooldown - BOOST.duration;
@@ -351,7 +366,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   function handle(events, dt) {
     for (const event of events) {
       if (event.type === 'collect') burst.emit(probe.set(FLOWERS[event.flower].x, FLOWERS[event.flower].y, FLOWERS[event.flower].z), { color: '#ffd35a', count: 16, speed: 2.2 });
-      else if (event.type === 'deliver' && player && event.id === player.id) {
+      if (event.type === 'deliver') { const bee = game.players.get(event.id); if (bee) gauge.deliver(probe.set(bee.x, bee.y, bee.z), event.amount, player && event.id === player.id ? 'player' : 'scouts'); }
+      if (event.type === 'heist-drain') gauge.drain(1);
+      if (event.type === 'deliver' && player && event.id === player.id) {
         bubbles.pow({ x: 0, y: 5.6, z: 0 }, `+${event.points}${event.bonus > 1 ? ` ×${event.bonus}` : ''}`, 'points');
         toast(`+${event.points} points: ${event.amount} nectar${event.bonus > 1 ? ` × ${event.bonus} ${event.amount >= RULES.capacity ? 'full' : 'big'}-load bonus` : ''}.`);
         burst.emit(probe.set(0, 4.3, 0), { color: '#f5b324', count: 34, speed: 3.6, gravity: -5 }); hiveBeacon = Math.max(hiveBeacon, 0.6);
@@ -365,7 +382,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
         if (player && event.id === player.id) { beeView.bump(1); toast(event.spilled ? `Bumped by the bumblebee! You spilled ${event.spilled} nectar.` : 'Bumped by the bumblebee!'); }
       }
       if (started && event.type === 'bumble-warning') { $('alert-text').textContent = event.mode === 'heist' ? 'BUMBLEBEE WANTS YOUR HONEY' : 'BUMBLEBEE INCOMING'; $('bumble-alert').hidden = false; alertTime = event.seconds + 0.6; }
-      if (started && event.type === 'bumble-enter' && event.mode !== 'heist') toast('Here it comes! Dodge the bumblebee!');
+      if (started && event.type === 'bumble-enter') startCinematic(event.mode);
+      if (started && event.type === 'bumble-enter' && event.mode !== 'heist' && reducedMotion) toast('Here it comes! Dodge the bumblebee!');
       if (started && event.type === 'heist-end') heistNote = { saved: event.rescued, drained: event.drained, time: 4 };
       if (started && event.type === 'power-ready') { powerTip = 3.5; powerNag = 14; }
       if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = 4;
@@ -427,7 +445,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bee.stars.group.visible = p.stun > 0.2; if (p.stun) bee.stars.update(elapsed);
       bee.aura?.update(dt, elapsed, { active: p.powered, boosting: game.powerBoosting(p) });
       bee.group.visible = !(own && view === 'bee'); // Name tags of bees right in front of the camera would cover the view (tour close-ups, bee view).
-      const near = camera.position.distanceTo(bee.group.position); bee.label.visible = !started ? near > 11 : view !== 'bee' || near > 6;
+      const near = camera.position.distanceTo(bee.group.position); bee.label.visible = cinematic.active ? false : !started ? near > 11 : view !== 'bee' || near > 6;
+      bee.fuzz.userData.setLayers(fuzzLayers(near));
       if (bee.stem) { bee.stem.visible = view === 'orbit' && started; bee.stem.position.copy(bee.group.position); bee.stem.scale.y = Math.max(0.01, bee.group.position.y - 0.1); }
     }
     const b = game.bumble;
@@ -444,6 +463,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bumble.update(dt, elapsed, { speed: b.speed, stunned: b.oops > 0 || b.wobble > 0.3, perched, sucking: perched, flailing: b.phase === 'falling' });
       bumbleShadow.position.set(b.x, 0.07, b.z);
     } else bumble.seen = false;
+    bumble.fur.userData.setLayers(bumbleLayers(camera.position.distanceTo(bumble.group.position)));
     if (!started) tourFrame(dt, elapsed);
     flowerModels.forEach(({ flower, drop }, i) => { flower.update(elapsed); drop.update(dt, elapsed, !game.cooldowns[i]); });
     // Toppled trees and flowers fall over, lie a moment with a small bounce, and stand up again.
@@ -456,9 +476,11 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     }
     burst.update(dt);
     hiveBeacon = Math.max(0, hiveBeacon - dt); hive.update(elapsed, hiveBeacon);
+    gauge.sync(game.honey); gauge.update(dt, elapsed);
     motes.rotation.y = Math.sin(elapsed * 0.07) * 0.1;
     const own = player && beeModels.get(player.id);
-    if (!started && !reducedMotion) { /* The landing tour placed the camera. */ }
+    if (cinematic.active && cinematicFrame(dt)) { /* The bumblebee entrance placed the camera. */ }
+    else if (!started && !reducedMotion) { /* The landing tour placed the camera. */ }
     else if (view === 'bee' && own) {
       beeView.apply(camera, own.group.position, dt, elapsed, { strafe, boosting: game.boosting(player), stunned: player.stun > 0 });
       viewModel.update(elapsed, { boosting: game.boosting(player) });
@@ -468,7 +490,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       orbit.apply(camera, orbitTarget);
     }
     if (player && started) {
-      const listener = view === 'bee' ? { x: player.x, y: player.y, z: player.z, yaw: beeView.yaw, pitch: beeView.pitch } : { x: player.x, y: player.y, z: player.z, yaw: orbit.azimuth + Math.PI };
+      const listener = cinematic.active ? { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(-camera.matrixWorld.elements[8], -camera.matrixWorld.elements[10]) } : view === 'bee' ? { x: player.x, y: player.y, z: player.z, yaw: beeView.yaw, pitch: beeView.pitch } : { x: player.x, y: player.y, z: player.z, yaw: orbit.azimuth + Math.PI };
       if (!paused) soundscape.frame(game, player, dt, { listener, beeView: view === 'bee', music });
     }
     renderer.render(scene, camera);
@@ -538,6 +560,38 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     camera.lookAt(tourAim);
     if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = snap ? fov : camera.fov + (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
   }
+  // Bumblebee entrance: approach, fly-past, and a look over its shoulder into the garden, then back to play.
+  const cinematic = createCinematic(), passSpot = new THREE.Vector3(), cineLook = new THREE.Vector3();
+  let cineShot = -1;
+  function startCinematic(mode) {
+    if (reducedMotion) return;
+    cinematic.start(); cineShot = -1; game.cutscene = CINEMATIC_LENGTH + 0.1; release();
+    root.classList.add('cinematic'); $('letterbox').hidden = false;
+    $('cine-title').textContent = mode === 'heist' ? '🐝 It\u2019s back, and it\u2019s hungry!' : '🐝 Here comes the bumblebee!';
+  }
+  function endCinematic() {
+    if (!cinematic.active && !root.classList.contains('cinematic')) return;
+    cinematic.stop(); game.cutscene = 0; root.classList.remove('cinematic'); $('letterbox').hidden = true; $('tour-cover').style.opacity = '0';
+    camera.fov = view === 'bee' ? beeView.fov : ORBIT_FOV; camera.updateProjectionMatrix();
+  }
+  function cinematicFrame(dt) {
+    const frame = cinematic.update(paused ? 0 : dt), b = game.bumble;
+    if (!frame || !b) { endCinematic(); return false; }
+    const p = bumble.group.position, fx = Math.sin(b.yaw), fz = Math.cos(b.yaw), rx = -fz, rz = fx;
+    let fov = 46;
+    if (frame.index !== cineShot) {
+      cineShot = frame.index;
+      if (frame.shot === 'pass') { passSpot.set(p.x + fx * 3.6 + rx * 1.5, p.y + 0.35, p.z + fz * 3.6 + rz * 1.5); audio.play('pass', null, { rate: 0.55, bus: 'bumblebee' }); }
+    }
+    if (frame.shot === 'approach') { const d = 7.5 - frame.t * 1.4; camera.position.set(p.x + fx * d + rx * 0.6, p.y + 0.5, p.z + fz * d + rz * 0.6); cineLook.set(p.x, p.y + 0.2, p.z); }
+    else if (frame.shot === 'pass') { fov = 52; camera.position.copy(passSpot); cineLook.copy(p); }
+    else { fov = 56; camera.position.set(p.x - fx * 6.5 + rx * 1.2, p.y + 2.8, p.z - fz * 6.5 + rz * 1.2); cineLook.set(p.x + fx * 12, p.y - 1.5, p.z + fz * 12); }
+    camera.lookAt(cineLook);
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    $('tour-cover').style.opacity = (frame.cover * 0.9).toFixed(3);
+    return true;
+  }
+  renderer.domElement.addEventListener('pointerdown', () => { if (cinematic.active) endCinematic(); }, true);
   function endTour() {
     $('tour-caption').hidden = true; $('tour-cover').style.opacity = '0'; $('start').classList.remove('pulse');
     root.classList.remove('bee-view'); camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); orbitTarget.set(0, 0, 0);
@@ -549,6 +603,6 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     pause() { if (started && !paused) togglePause(); },
     resize(w, h) { width = w; height = h; camera.aspect = w / h; camera.updateProjectionMatrix(); placePanel(); },
     activate() { active = true; container.replaceChildren(root); onFullscreen(); placePanel(); renderer.domElement.setAttribute('aria-label', 'A floating garden with bees and a golden hive'); if (started && !paused) audio.resume(); updateUI(); },
-    deactivate() { active = false; release(); viewControls.cancel(); look.release(); audio.suspend(); root.remove(); },
+    deactivate() { active = false; endCinematic(); release(); viewControls.cancel(); look.release(); audio.suspend(); root.remove(); },
   };
 }

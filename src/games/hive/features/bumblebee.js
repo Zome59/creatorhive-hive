@@ -6,7 +6,7 @@ import { WORLD, OBSTACLES, contact } from '../world.js';
 export const BUMBLE = Object.freeze({ radius: 1, speed: 4.6, life: 22, spawn: [0.42, 0.58], reach: 9, warning: 4 });
 // A power-boosting player can shove the crossing bumblebee away; each shove costs nectar.
 export const SHOVE = Object.freeze({ cost: 2, push: 9, giveUp: 2 });
-export const HEIST = Object.freeze({ spawn: [0.72, 0.82], gap: 6, perch: Object.freeze({ x: 0, y: 5.05, z: 0 }), drain: 2.5, patience: 28, hits: 3, impact: 2.2 });
+export const HEIST = Object.freeze({ spawn: [0.72, 0.82], gap: 6, roam: [4, 10], direct: 0.25, perch: Object.freeze({ x: 0, y: 5.05, z: 0 }), drain: 2.5, patience: 28, hits: 3, impact: 2.2 });
 const wrap = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
@@ -20,9 +20,12 @@ export function scheduleBumblebee(game, goal) {
 }
 function spawn(game, mode, at) {
   const angle = mode === 'heist' ? game.heistAngle : game.bumbleAngle;
-  game.bumble = { mode, phase: mode === 'heist' ? 'approach' : 'roam', x: Math.sin(angle) * (WORLD.radius + 3), y: 4.5, z: Math.cos(angle) * (WORLD.radius + 3),
+  // It enters high above the treetops (clear sky behind it for the entrance shots), then drops in.
+  game.bumble = { mode, phase: mode === 'heist' ? 'approach' : 'roam', x: Math.sin(angle) * (WORLD.radius + 3), y: 7, z: Math.cos(angle) * (WORLD.radius + 3),
     yaw: angle + Math.PI + (mode === 'heist' ? 0 : (game.random() - 0.5) * 0.6), age: 0, retarget: 1.5, target: null, lurch: 0, thud: 0, oops: 0, wobble: 0,
     leaving: false, hits: 0, speed: 0, knocks: 0, drained: 0, sip: 0, perched: 0, vx: 0, vy: 0, vz: 0, fall: 0, ...at };
+  // On its raid it usually bumbles around the garden for a while, knocking bees over, before it heads for the honey.
+  if (mode === 'heist') game.bumble.roamFor = game.random() < HEIST.direct ? 0 : HEIST.roam[0] + game.random() * (HEIST.roam[1] - HEIST.roam[0]);
   game.emit({ type: 'bumble-enter', mode, x: game.bumble.x, y: game.bumble.y, z: game.bumble.z });
 }
 // The landing tour lets a bumblebee charge straight into a group of scouts to show some action.
@@ -86,6 +89,10 @@ export function tickBumblebee(game, dt) {
   if (b.mode === 'heist') return tickHeist(game, b, dt);
   if (b.age > BUMBLE.life) b.leaving = true;
   if (b.leaving) { avoidObstacles(game, b); return flyAway(game, b, dt); }
+  roam(game, b, dt);
+}
+// Clumsy flight toward a bee it picked (often the player), knocking over every bee it touches.
+function roam(game, b, dt) {
   if (b.retarget <= 0) { b.target = pickTarget(game); b.retarget = 2.6 + game.random() * 2; if (game.random() < 0.3) b.lurch = 0.9; }
   const target = game.players.get(b.target);
   const desired = target ? Math.atan2(target.x - b.x, target.z - b.z) : Math.atan2(-b.x, -b.z);
@@ -94,12 +101,12 @@ export function tickBumblebee(game, dt) {
   b.speed = BUMBLE.speed * (b.lurch ? 1.75 : 1) * (b.oops ? 0.4 : 1);
   b.x += Math.sin(b.yaw) * b.speed * dt; b.z += Math.cos(b.yaw) * b.speed * dt;
   if (b.px || b.pz) { b.x += b.px * dt; b.z += b.pz * dt; const fade = Math.exp(-dt * 2.4); b.px *= fade; b.pz *= fade; }
-  const altitude = (target ? target.y : 3.5) + Math.sin(b.age * 1.7) * 0.9;
+  const altitude = game.cutscene ? 6.8 : (target ? target.y : 3.5) + Math.sin(b.age * 1.7) * 0.9;
   b.y = clamp(b.y + clamp(altitude - b.y, -1, 1) * 2.2 * dt, 1.2, 7.5);
   avoidObstacles(game, b);
   for (const p of game.players.values()) {
     const dx = p.x - b.x, dy = p.y - b.y, dz = p.z - b.z, d = Math.hypot(dx, dy, dz);
-    if (d >= BUMBLE.radius + WORLD.beeRadius || p.stun) continue;
+    if (d >= BUMBLE.radius + WORLD.beeRadius || p.stun || (game.cutscene && !p.bot)) continue;
     const nx = d ? dx / d : 0, ny = d ? dy / d : 1, nz = d ? dz / d : 0;
     if (p.poke) continue;
     if (!p.bot && game.powerBoosting(p) && p.bag >= SHOVE.cost) { // Power shove: the bumblebee goes flying instead.
@@ -125,9 +132,10 @@ export function tickBumblebee(game, dt) {
 
 // Second visit: fly to the hive, sit on top, and drink honey. Scouts swarm and poke it, but only
 // the player's bumps (HEIST.hits of them) knock it off.
-export const heistActive = game => game.bumble?.mode === 'heist' && (game.bumble.phase === 'approach' || game.bumble.phase === 'perched');
+export const heistActive = game => game.bumble?.mode === 'heist' && (game.bumble.phase === 'perched' || (game.bumble.phase === 'approach' && !(game.bumble.roamFor > 0)));
 function tickHeist(game, b, dt) {
   const perch = HEIST.perch;
+  if (b.phase === 'approach' && b.roamFor > 0) { b.roamFor -= dt; roam(game, b, dt); return; }
   if (b.phase === 'approach') {
     const dx = perch.x - b.x, dz = perch.z - b.z, flat = Math.hypot(dx, dz);
     b.yaw = wrap(b.yaw + clamp(wrap(Math.atan2(dx, dz) - b.yaw), -2.5 * dt, 2.5 * dt) + Math.sin(b.age * 2.1) * 0.35 * dt);

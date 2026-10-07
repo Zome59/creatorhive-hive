@@ -87,7 +87,8 @@ function raid(seed = 11) {
   Object.assign(game, { honey: 200, bumbleDone: true, bumbleGone: 10, heistAt: game.remaining + 1 });
   Object.assign(bee, { x: 20, y: 2, z: 0 });
   const seen = []; let t = 0;
-  const run = (seconds, each = () => {}) => { for (let end = t + seconds; t < end; t += 0.05) { each(); game.tick(0.05); seen.push(...game.events.map(e => ({ ...e, t }))); } };
+  // These tests are about the raid itself, so the bumblebee skips its roaming warm-up.
+  const run = (seconds, each = () => {}) => { for (let end = t + seconds; t < end; t += 0.05) { each(); game.tick(0.05); if (game.bumble?.roamFor) game.bumble.roamFor = 0; seen.push(...game.events.map(e => ({ ...e, t }))); } };
   return { game, bee, seen, run };
 }
 test('the bumblebee comes back to raid the hive, drains honey, and the scouts swarm it in vain', () => {
@@ -215,4 +216,36 @@ test('a heavier load slows the bee progressively, and bigger deliveries score mo
   game.honey = RULES.goal; game.tick(0.05); assert.equal(game.best, 160); assert.equal(game.newBest, true);
   for (let i = 0; i < 125; i++) game.tick(0.1);
   assert.equal(bee.points, 0, 'points reset each round'); assert.equal(game.best, 160, 'best kept for the session');
+});
+test('a cutscene stops the round clock and keeps the player bee still and safe', () => {
+  const game = new Game({ bots: 2 }), bee = game.addPlayer();
+  Object.assign(bee, { x: 10, y: 3, z: 0 }); game.cutscene = 2;
+  const clock = game.remaining;
+  for (let i = 0; i < 20; i++) { game.setInput(bee.id, { x: 1, dash: true }); game.tick(0.05); }
+  assert.equal(game.remaining, clock, 'clock paused'); assert.ok(Math.abs(bee.x - 10) < 1e-9, 'player waits'); assert.equal(bee.boost, 0);
+  game.bumble = { mode: 'cross', phase: 'roam', x: 10.5, y: 3, z: 0, yaw: 0, age: 1, retarget: 9, target: null, lurch: 0, thud: 0, oops: 0, wobble: 0, leaving: false, hits: 0, speed: 0, knocks: 0, px: 0, pz: 0 };
+  game.bumbleDone = true; game.heistDone = true; game.tick(0.05);
+  assert.ok(!game.events.some(e => e.type === 'bumble-hit' && e.id === bee.id), 'not hit during the cutscene');
+  for (let i = 0; i < 40; i++) game.tick(0.05);
+  assert.ok(game.remaining < clock, 'clock runs again afterwards');
+});
+
+test('on its raid the bumblebee usually bumbles around and knocks bees over before going for the honey', () => {
+  let roamed = 0, direct = 0, hits = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const game = new Game({ bots: 6, random: seeded(seed) });
+    Object.assign(game, { honey: 200, bumbleDone: true, bumbleGone: 10, heistAt: game.remaining + 1 });
+    for (let i = 0; i < 100 && !game.bumble; i++) game.tick(0.05);
+    const b = game.bumble; assert.equal(b.mode, 'heist');
+    if (b.roamFor > 0) { roamed++; assert.ok(b.roamFor >= HEIST.roam[0] && b.roamFor <= HEIST.roam[1]); } else direct++;
+    for (let i = 0; i < 600; i++) { game.tick(0.05); hits += game.events.filter(e => e.type === 'bumble-hit').length; if (game.bumble?.phase === 'perched') break; }
+    assert.equal(game.bumble?.phase, 'perched', `seed ${seed}: still raids the hive in the end`);
+  }
+  assert.ok(roamed >= 6, `${roamed} roamed first, ${direct} flew straight in`);
+  // Sometimes (HEIST.direct) it skips the warm-up and flies straight to the hive.
+  const quick = new Game({ bots: 0, random: () => HEIST.direct / 2 });
+  Object.assign(quick, { bumbleDone: true, bumbleGone: 10, heistAt: quick.remaining + 1 });
+  for (let i = 0; i < 100 && !quick.bumble; i++) quick.tick(0.05);
+  assert.equal(quick.bumble.roamFor, 0);
+  assert.ok(hits > 0, 'it knocked bees over while roaming');
 });

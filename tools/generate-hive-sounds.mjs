@@ -44,8 +44,11 @@ export const RECIPES = {
   slurp: { seed: 155, duration: 3, max: 1.3, prompt: 'Comedic cartoon slurping sound: a big fuzzy character greedily sucks thick honey through a tiny straw, one wet gurgling slurp with a happy little gulp at the end, about one second, then complete silence, isolated, no music, no speech.' },
   // Background music: generated once, cut to a seamless loop, stereo, played quietly on the music channel.
   'music-synthwave': { model: MUSIC, seed: 301, settings: INSTRUMENTAL, music: { from: 6, length: 70 }, prompt: 'Warm, mellow instrumental synthwave for a cozy video game set in a sunny flower garden full of bees: steady relaxed groove around 100 BPM, soft gated drums, round analog bass, shimmering arpeggiated synths, dreamy pads, retro 1980s feel, positive and laid back, consistent energy without breaks or big drops, no vocals.' },
-  // Modeled on classic beatless ambient chill-out albums: one drifting dreamscape of pads and field recordings.
-  'music-chill': { model: MUSIC, seed: 321, settings: INSTRUMENTAL, music: { from: 40, length: 80 }, prompt: 'Beatless ambient chill-out dreamscape, one continuous slowly drifting piece: warm analog synth pads and soft reverberant chords that swell and fade like breathing, deep calm bass drones; field recordings woven through the whole track: sheep bleating far away in a meadow, a distant train passing with a long soft horn, crickets and night insects, birdsong, a gentle stream, faint far-off thunder and soft wind; airy, spacious, nocturnal, dreamy and peaceful; no drums, no guitar, no vocals.' },
+  // Pure nature, no instruments: a summer meadow mixed locally from short field-recording-style layers.
+  'music-meadow': { scape: { length: 80, bed: [401, 402, 403, 404], birds: [411, 412, 413, 414], brook: [421, 422] } },
+  'meadow-bed': { duration: 10, prompt: 'Peaceful summer meadow ambience: a very soft warm breeze through tall grass, faint distant crickets and grasshoppers, calm and continuous, natural field recording, no birds, no water, no music, no voices.' },
+  'meadow-birds': { duration: 10, prompt: 'A few summer songbirds chirping and singing in a meadow nearby, short cheerful phrases with quiet pauses in between, natural field recording, soft breeze, no music, no voices.' },
+  'meadow-brook': { duration: 10, prompt: 'A small gentle brook babbling over pebbles in a meadow, soft continuous trickling water, calm natural field recording, no birds, no music, no voices.' },
   dizzy: { seed: 145, duration: 2, max: 1.4, prompt: 'Cartoon dizzy sound effect: little twittering chirps and twinkling sparkles circling the head of a stunned character, whimsical and short, about one second, then complete silence, isolated, no music, no speech.' },
 };
 
@@ -179,6 +182,51 @@ function encode(name, samples, channels = 1) {
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'f32le', '-ar', String(RATE), '-ac', String(channels), '-i', temp, '-c:a', 'libmp3lame', '-b:a', '64k', '-map_metadata', '-1', resolve(output, `${name}.mp3`)]);
   rmSync(temp);
 }
+// Summer meadow: a grass-and-crickets bed chained from several clips, a brook that drifts in and out,
+// and a few short bird phrases placed left and right. Built a little longer than the loop, then crossfaded.
+function soundscape({ length, bed, birds, brook }) {
+  const clip = (name, seed) => decode(resolve(cache, `${name}-${seed}.wav`));
+  const size = Math.round((length + 3) * RATE), out = new Float32Array(size * 2), fade = Math.round(2 * RATE);
+  const bedClips = bed.map(seed => clip('meadow-bed', seed)), bedLevel = 10 ** (-26 / 20);
+  let at = 0, k = 0;
+  while (at < size) {
+    const c = bedClips[[0, 1, 2, 3, 2, 0, 3, 1][k++ % 8] % bedClips.length], scale = bedLevel / Math.max(1e-6, rms(c));
+    for (let i = 0; i < c.length && at + i < size; i++) {
+      const w = i < fade ? Math.sin(Math.PI / 2 * i / fade) : i > c.length - fade ? Math.sin(Math.PI / 2 * (c.length - i) / fade) : 1;
+      out[(at + i) * 2] += c[i] * scale * w; out[(at + i) * 2 + 1] += c[Math.max(0, i - 13)] * scale * w; // a few samples apart: wide, soft stereo
+    }
+    at += c.length - fade;
+  }
+  const brookClips = brook.map(seed => clip('meadow-brook', seed)), brookLevel = 10 ** (-29 / 20), brookRms = brookClips.map(c => Math.max(1e-6, rms(c)));
+  for (let i = 0; i < size; i++) {
+    const t = i / RATE, swell = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 16) / 34)))) ** 1.5; // audible from about 16 s to 50 s
+    if (!swell) continue;
+    const n = Math.floor(i / (8 * RATE)) % brookClips.length, c = brookClips[n], v = c[i % c.length] / brookRms[n] * brookLevel * swell;
+    out[i * 2] += v * 0.8; out[i * 2 + 1] += v * 0.55;
+  }
+  // Birds only now and then: four short phrases, alternating left and right.
+  const birdClips = birds.map(seed => clip('meadow-birds', seed)), birdLevel = 10 ** (-27 / 20), phrase = Math.round(4.5 * RATE), skip = Math.round(0.5 * RATE);
+  [[6, -0.5], [26, 0.45], [47, -0.25], [66, 0.5]].forEach(([start, pan], n) => {
+    const c = birdClips[n % birdClips.length], part = c.subarray(skip, skip + phrase), scale = birdLevel / Math.max(1e-6, rms(part)), from = Math.round(start * RATE), soft = Math.round(0.6 * RATE);
+    for (let i = 0; i < part.length && from + i < size; i++) {
+      const w = Math.min(1, i / soft, (part.length - i) / soft) * part[i] * scale;
+      out[(from + i) * 2] += w * (1 - Math.max(0, pan)); out[(from + i) * 2 + 1] += w * (1 + Math.min(0, pan));
+    }
+  });
+  return loopStereo(out, { from: 0, length });
+}
+function loopStereo(all, { from, length }) {
+  const frames = all.length / 2, start = Math.round(from * RATE), size = Math.round(length * RATE), fade = Math.round(3 * RATE);
+  if (start + size + fade > frames) throw new Error('loop window exceeds the audio');
+  const out = all.slice(start * 2, (start + size) * 2);
+  for (let i = 0; i < fade; i++) {
+    const t = i / fade * Math.PI / 2;
+    for (let c = 0; c < 2; c++) out[i * 2 + c] = out[i * 2 + c] * Math.sin(t) + all[(start + size + i) * 2 + c] * Math.cos(t);
+  }
+  const scale = 10 ** (-20 / 20) / Math.max(1e-6, rms(out));
+  let peak = 0; for (const x of out) peak = Math.max(peak, Math.abs(x * scale));
+  return out.map(x => x * scale * (peak > 0.89 ? 0.89 / peak : 1));
+}
 // Music stays stereo: a long window with a 3 s equal-power crossfade so it loops without a seam.
 function musicLoop(file, { from, length }) {
   const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
@@ -204,11 +252,13 @@ if (explore) {
 } else {
   const only = option('--only')?.split(','), names = HIVE_SOUNDS.flatMap(soundFiles).filter(name => !only || only.includes(name));
   for (const name of names) if (!RECIPES[name]) throw new Error(`${name}: missing recipe`);
-  if (!flag('--encode-only')) await Promise.all(names.filter(name => !RECIPES[name].from).map(name => generate(name, RECIPES[name].seed)));
+  const layers = names.flatMap(name => Object.entries(RECIPES[name].scape ?? {}).filter(([key]) => key !== 'length').flatMap(([key, seeds]) => seeds.map(seed => [`meadow-${key}`, seed])));
+  if (!flag('--encode-only')) await Promise.all([...names.filter(name => !RECIPES[name].from && !RECIPES[name].scape).map(name => generate(name, RECIPES[name].seed)), ...layers.map(([name, seed]) => generate(name, seed))]);
   const finished = new Map();
   for (const name of names) {
     const recipe = RECIPES[name];
     if (recipe.from) { encode(name, recipe.chime ? level(chime(finished.get(recipe.from), recipe.chime), -17) : flyby(finished.get(recipe.from), recipe.flyby)); console.log(`${name}: derived from ${recipe.from}`); continue; }
+    if (recipe.scape) { encode(name, soundscape(recipe.scape), 2); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
     if (recipe.music) { encode(name, musicLoop(resolve(cache, `${name}-${recipe.seed}.wav`), recipe.music), 2); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
     let samples = decode(resolve(cache, `${name}-${recipe.seed}.wav`), recipe.pitch);
     if (recipe.tone) {

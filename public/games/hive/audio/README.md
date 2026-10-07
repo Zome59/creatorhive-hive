@@ -1,6 +1,6 @@
 # Honey Retrieval sound effects
 
-Sixteen short sound effects (mono MP3, 44.1 kHz, 64 kbit/s, about 225 KiB together) and two background music loops (stereo MP3, 64 kbit/s, 70 and 80 seconds, loaded only when played) for the garden game. They are loaded locally by `src/games/hive/features/audio/engine.js`; the game makes no external audio requests.
+Sixteen short sound effects (mono MP3, 44.1 kHz, 64 kbit/s, about 225 KiB together) and two background loops (stereo MP3, 64 kbit/s, 70 and 80 seconds, loaded only when played) for the garden game. They are loaded locally by `src/games/hive/features/audio/engine.js`; the game makes no external audio requests.
 
 ## Source
 
@@ -16,7 +16,8 @@ The raw clips were generated once, offline, with text-to-audio models through th
 | `collect.mp3`, `deliver.mp3`, `boost.mp3` | Mirelo SFX 1.5 | Nectar pickup, hive delivery, boost whoosh |
 | `alarm.mp3` | synthesized | Soft two-note “uh-oh” chime over the swelling bumblebee drone (warning) |
 | `dizzy.mp3`, `slurp.mp3` | Mirelo SFX 1.5 | Dizzy stars, the bumblebee drinking honey |
-| `music-synthwave.mp3`, `music-chill.mp3` | MiniMax Music 2.6 (instrumental) | Background music: mellow synthwave, and an ambient chill-out with nature sounds; cut to seamless 70- and 80-second loops |
+| `music-meadow.mp3` | Mirelo SFX 1.5 layers, mixed locally | Default background, nature only: a summer-meadow bed (grass, distant crickets) chained from four clips, a brook that drifts in and out, and four short bird phrases panned left and right; a seamless 80-second loop |
+| `music-synthwave.mp3` | MiniMax Music 2.6 (instrumental) | Optional mellow synthwave, cut to a seamless 70-second loop |
 | `grumble-1.mp3` … `grumble-3.mp3` | Seed Audio 1.0 | Comic gibberish complaints (no real words), pitched up to bee size; pitched down for the bumblebee |
 
 No recordings, samples, sound packs, existing music, or real speech are included.

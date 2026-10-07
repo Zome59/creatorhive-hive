@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createShellFur } from './shell-fur.js';
 import { GARDEN_PALETTE as palette } from '../palette.js';
 
 // Procedural art for the hive game. No assets and no canvas/document access, so every model also builds in Node tests.
@@ -316,6 +317,8 @@ export function createBumblebee() {
   const felt = beeFurMaterial(true), plain = beeFurMaterial(false), dark = std('#2d2a26', { roughness: 0.9 }), joint = std('#3a352f', { roughness: 0.85 }), L = beeLimbs();
   const torso = put(body, beeBodyGeometry(), felt, 0, 0, 0, 'bee-body'); torso.receiveShadow = false; torso.morphTargetInfluences[0] = 0;
   const torsoFur = beeFurMesh(once('bee:fur-torso', () => beeFurGeometry(beeBodyFur(rng(7)), true)), felt, 'bee-fur'); body.add(torsoFur);
+  // Shell fur over the torso; the scene lowers the layer count with distance (level of detail).
+  const shellFur = createShellFur(beeBodyGeometry(), { layers: 32, length: 0.12, density: [16, 10], rootShade: 0.45, droop: 0.25 }); body.add(shellFur);
 
   const head = new THREE.Group(); head.name = 'bee-head'; head.position.copy(BEE_HEAD_AT); body.add(head);
   const skull = put(head, beeSkullGeometry(), plain, 0, 0, 0, 'head'); skull.receiveShadow = false; head.add(beeFurMesh(once('bee:fur-head', () => beeFurGeometry(beeHeadFur(rng(8)), false)), plain, 'bee-head-fur'));
@@ -354,6 +357,7 @@ export function createBumblebee() {
   // Pose weights ease towards their targets, so switching between flying, perching, drinking and flailing never snaps.
   let stun = 0, perch = 0, drink = 0, flail = 0, swell = 0; const ease = (w, to, dt, rate) => w + (to - w) * (1 - Math.exp(-dt * rate)), sway = new THREE.Euler();
   return {
+    fur: shellFur,
     group,
     update(dt, elapsed, state) {
       const { speed = 0, stunned = false, perched = false, sucking = false, flailing = false } = state || {}, e = elapsed; dt = Math.max(0, dt || 0);
