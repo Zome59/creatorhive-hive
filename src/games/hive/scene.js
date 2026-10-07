@@ -42,7 +42,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   $('fullscreen').onclick = fullscreen;
   $('view').disabled = true;
   // The landing screen plays quietly from the first click or key press (browsers need a gesture for sound).
-  const INTRO_MIX = 0.3;
+  const INTRO_MIX = 0.12; // very quiet until the round starts
   function introSound() { if (active && !started && soundOn && !audio.enabled) { audio.setMix(INTRO_MIX, 0); audio.setEnabled(true); $('sound-hint').hidden = true; } }
   document.addEventListener('pointerdown', introSound, true); document.addEventListener('keydown', introSound, true);
   $('start').onclick = () => {
@@ -51,7 +51,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     game.reset(); game.round = 1; player = game.addPlayer(); started = true;
     $('intro').hidden = true; $('flight-hud').hidden = false; $('pause').disabled = false; $('view').disabled = false; $('phase').textContent = 'ACTIVE';
     if (!audio.enabled) audio.setMix(INTRO_MIX, 0); $('sound-hint').hidden = true;
-    audio.setEnabled(soundOn); audio.setMix(1, 2.5); soundscape.reset(); // fade up from the quiet intro
+    audio.setEnabled(soundOn); audio.setMix(1, 4); soundscape.reset(); // fade up from the quiet intro
     toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.'); $('intro-best').hidden = true;
   };
   function togglePause() {

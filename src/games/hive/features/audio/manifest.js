@@ -17,8 +17,8 @@ export const HIVE_SOUNDS = Object.freeze([
   { name: 'alarm', gain: 0.22, bus: 'effects' },
   { name: 'dizzy', gain: 0.4, bus: 'effects' },
   { name: 'slurp', gain: 0.55, bus: 'bumblebee' },
-  { name: 'music-synthwave', loop: true, gain: 0.075, bus: 'music', lazy: true },
-  { name: 'music-meadow', loop: true, gain: 0.16, bus: 'music', lazy: true },
+  { name: 'music-synthwave', loop: true, gain: 0.04, bus: 'music', lazy: true },
+  { name: 'music-meadow', loop: true, gain: 0.09, bus: 'music', lazy: true },
 ]);
 export const soundFiles = sound => sound.variants ? Array.from({ length: sound.variants }, (_, i) => `${sound.name}-${i + 1}`) : [sound.name];
 // Sound mixer channels, in the order the controls panel shows them. Levels go from 0 to 150 %.
