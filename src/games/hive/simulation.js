@@ -2,7 +2,9 @@ import { WORLD, FLOWERS, OBSTACLES, contact } from './world.js';
 import { BUMBLE, HEIST, SHOVE, heistActive, scheduleBumblebee, tickBumblebee } from './features/bumblebee.js';
 
 export { FLOWERS };
-export const RULES = Object.freeze({ radius: WORLD.radius, capacity: 8, duration: 180, break: 12, goal: 300, regrow: 1.2 });
+export const RULES = Object.freeze({ radius: WORLD.radius, capacity: 8, duration: 180, break: 18, goal: 360, regrow: 1.2 });
+// Goal celebration: a joyful loop around the hive, then a honeycomb formation (centre + hexagon rings) above it.
+export const CELEBRATION = Object.freeze({ loop: 3.5, loopRadius: 6, height: 8.2, cell: 2.6 });
 // Shift starts a long boost; nectar pickups shorten the recharge.
 export const BOOST = Object.freeze({ duration: 2.5, cooldown: 6, speed: 12.5, refill: 1.2 });
 // Nectar power: enough collected nectar charges the player's next boost into a power boost that
@@ -80,7 +82,7 @@ export class Game {
       if (!this.result) this.finish();
       else this.reset();
     }
-    if (this.result) return;
+    if (this.result) { if (this.celebration) this.celebrate(dt); return; }
     this.cooldowns = this.cooldowns.map(c => Math.max(0, c - dt));
     for (const [key, value] of this.pairs) if (value <= dt) this.pairs.delete(key); else this.pairs.set(key, value - dt);
     for (const [owner, state] of this.toppled) { state.time -= dt; if (state.time <= 0) { this.toppled.delete(owner); this.emit({ type: 'restore', owner, kind: state.kind, x: state.x, y: 1.2, z: state.z }); } }
@@ -250,8 +252,35 @@ export class Game {
     }
     p.input = { x: clamp(x, -1, 1), y: clamp(y, -1, 1), z: clamp(z, -1, 1), dash: false };
   }
+  // Honeycomb slots: 0 is the centre, then rings of six around it (one hexagon per ring).
+  static honeycombSlot(i) {
+    if (!i) return { x: 0, z: 0 };
+    const ring = Math.ceil(i / 6), a = ((i - 1) % 6) / 6 * Math.PI * 2;
+    return { x: Math.sin(a) * CELEBRATION.cell * ring, z: Math.cos(a) * CELEBRATION.cell * ring };
+  }
+  celebrate(dt) {
+    const c = this.celebration; c.t += dt;
+    const bees = [...this.players.values()].sort((a, b) => Number(a.bot) - Number(b.bot) || a.id - b.id); // the player takes the centre
+    bees.forEach((p, i) => {
+      let x, y, z, face;
+      if (c.t < CELEBRATION.loop) { // everyone loops around the hive together
+        const a = c.t * 1.6 + i / bees.length * Math.PI * 2;
+        x = Math.sin(a) * CELEBRATION.loopRadius; z = Math.cos(a) * CELEBRATION.loopRadius; y = 5 + Math.sin(c.t * 3 + i) * 0.6; face = a + Math.PI / 2;
+      } else { // then they settle into a slowly turning honeycomb
+        const spin = (c.t - CELEBRATION.loop) * 0.5, slot = Game.honeycombSlot(i), cs = Math.cos(spin), sn = Math.sin(spin);
+        x = slot.x * cs + slot.z * sn; z = slot.z * cs - slot.x * sn; y = CELEBRATION.height + Math.sin(c.t * 2 + i) * 0.12; face = spin + Math.PI / 2;
+      }
+      const k = 1 - Math.exp(-dt * 3);
+      p.vx = (x - p.x) * 3; p.vy = (y - p.y) * 3; p.vz = (z - p.z) * 3;
+      p.x += (x - p.x) * k; p.y += (y - p.y) * k; p.z += (z - p.z) * k; p.yaw = face;
+      Object.assign(p, { kx: 0, ky: 0, kz: 0, stun: 0, angry: 0, fume: 0 });
+    });
+  }
   finish() {
     this.result = this.honey >= RULES.goal ? 'complete' : 'time';
+    this.celebration = this.result === 'complete' ? { t: 0 } : null;
+    this.bumbleWarn = 0; // no bumblebee announcement carries over into the round break
+    this.emit({ type: 'round-end', result: this.result });
     this.remaining = RULES.break;
     this.lastWinners = [...this.players.values()].sort((a, b) => b.score - a.score).slice(0, 3).map(p => ({ name: p.name, score: p.score }));
     const player = [...this.players.values()].find(p => !p.bot);
@@ -262,7 +291,7 @@ export class Game {
     if (this.bumble) { this.bumble = null; this.emit({ type: 'bumble-leave' }); }
   }
   reset() {
-    this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.cooldowns.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
+    this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.celebration = null; this.cooldowns.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
     scheduleBumblebee(this, RULES.goal);
     for (const p of this.players.values()) {
       Object.assign(p, home(p.id), { score: 0, points: 0, bag: 0, boost: 0, power: 0, powered: false, kx: 0, ky: 0, kz: 0, vx: 0, vy: 0, vz: 0, stun: 0, angry: 0, fume: 0 });

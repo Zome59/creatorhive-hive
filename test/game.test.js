@@ -27,7 +27,7 @@ test('boost has a cooldown and round victory resets inventory and scores', () =>
   assert.equal(bee.boost, BOOST.cooldown); game.tick(0.05); assert.ok(bee.boost < BOOST.cooldown);
   game.honey = RULES.goal; game.tick(0.05); assert.equal(game.result, 'complete');
   bee.bag = 5; bee.score = 50;
-  for (let i = 0; i < 125; i++) game.tick(0.1);
+  for (let i = 0; i < 10 * RULES.break + 5; i++) game.tick(0.1);
   assert.equal(game.round, 2); assert.equal(game.result, null); assert.equal(game.honey, 0); assert.equal(bee.bag, 0); assert.equal(bee.score, 0);
 });
 test('time expiry finishes the round and scouts actually gather and deliver nectar', () => {

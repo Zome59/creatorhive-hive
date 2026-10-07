@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 
-// Honeycomb ring around the hive base: one cell per `unit` nectar in the hive. Cells fill in order;
+// Honeycomb ring around the hive base: one cell per `unit` nectar in the hive (the ring holds the goal). Cells fill in order;
 // a cell filled mostly by the player glows orange, scout honey is gold. Delivered honey flies into
 // the next cell as droplets. The ledger keeps who brought each nectar, newest last (thieves drink
 // from the top).
-export const GAUGE = Object.freeze({ cells: 30, unit: 10, radius: 2.72, y: 0.36 });
+export const GAUGE = Object.freeze({ cells: 30, unit: 12, radius: 2.72, y: 0.36 }); // 30 cells × 12 = the 360-nectar goal
 const COLORS = Object.freeze({ empty: new THREE.Color('#4d3f27'), scouts: new THREE.Color('#f2b52a'), player: new THREE.Color('#ff7a1a') });
 
 export function createHoneyGauge({ cells = GAUGE.cells, unit = GAUGE.unit, radius = GAUGE.radius, y = GAUGE.y } = {}) {

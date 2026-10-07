@@ -230,6 +230,30 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   scene.add(grass);
   const hive = createHiveModel(); scene.add(hive.group);
   const gauge = createHoneyGauge(); scene.add(gauge.group);
+  // Goal celebration: the hive swells, honey floods out to a third of the island, and trees turn gold.
+  const flood = new THREE.Mesh((() => {
+    const g = new THREE.CircleGeometry(1, 96), pos = g.attributes.position;
+    for (let i = 1; i < pos.count; i++) { const a = Math.atan2(pos.getY(i), pos.getX(i)), r = 1 + Math.sin(a * 7) * 0.035 + Math.sin(a * 13 + 1) * 0.02; pos.setXY(i, pos.getX(i) * r, pos.getY(i) * r); }
+    return g;
+  })(), new THREE.MeshPhysicalMaterial({ color: '#f0a020', roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.08, transparent: true, opacity: 0.92, emissive: '#5a2c00', emissiveIntensity: 0.25 }));
+  flood.rotation.x = -Math.PI / 2; flood.position.y = 0.12; flood.visible = false; flood.receiveShadow = true; scene.add(flood); // just above the highest hex tile
+  const GOLD = new THREE.Color('#f2c14e'), GOLD_GLOW = new THREE.Color('#6b4a00');
+  const ease = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+  function celebrate(dt, elapsed) {
+    const t = game.celebration?.t ?? -1, party = t >= 0;
+    const swell = party ? 1 + 0.35 * ease(t / 2) : 1;
+    hive.group.scale.setScalar(swell); gauge.group.scale.setScalar(swell);
+    flood.visible = party;
+    if (party) { const r = 3 + (WORLD.radius / 3 - 3) * ease(t / 9); flood.scale.set(r, r, 1); flood.rotation.z = elapsed * 0.02; }
+    const gold = party ? ease(t / 6) : 0;
+    for (const canopy of canopies) {
+      if (gold > 0 && !canopy.userData.base) { canopy.userData.base = canopy.material; canopy.material = canopy.material.clone(); }
+      if (canopy.userData.base) {
+        if (!gold) { canopy.material.dispose(); canopy.material = canopy.userData.base; canopy.userData.base = null; continue; }
+        canopy.material.color.copy(canopy.userData.base.color).lerp(GOLD, gold); canopy.material.emissive.copy(GOLD_GLOW).multiplyScalar(gold * 0.6);
+      }
+    }
+  }
   let hiveBeacon = 0;
   const pivots = new Map();
   const flowerModels = FLOWERS.map(f => {
@@ -239,12 +263,13 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     const drop = createHoneyDrop(); drop.group.position.set(f.x, f.y, f.z); scene.add(drop.group);
     return { flower, drop };
   });
+  const canopies = [];
   for (const [i, t] of TREES.entries()) {
     const tree = new THREE.Group(); tree.position.set(t.x, 0, t.z); scene.add(tree); pivots.set(`tree:${t.id}`, tree);
     mesh(cylinder(0.2, 0.32, t.height + 0.4, 7), '#806145', tree, 0, (t.height + 0.4) / 2, 0);
-    orb(tree, palette.foliage[i % palette.foliage.length], 0, t.height + 0.9, 0, t.canopy, t.canopy * 1.12, t.canopy);
-    orb(tree, palette.foliage[(i + 1) % palette.foliage.length], t.canopy * 0.4, t.height + 1.6, t.canopy * 0.15, t.canopy * 0.7);
-    orb(tree, palette.foliage[(i + 3) % palette.foliage.length], -t.canopy * 0.35, t.height + 1.3, -t.canopy * 0.3, t.canopy * 0.62);
+    canopies.push(orb(tree, palette.foliage[i % palette.foliage.length], 0, t.height + 0.9, 0, t.canopy, t.canopy * 1.12, t.canopy),
+      orb(tree, palette.foliage[(i + 1) % palette.foliage.length], t.canopy * 0.4, t.height + 1.6, t.canopy * 0.15, t.canopy * 0.7),
+      orb(tree, palette.foliage[(i + 3) % palette.foliage.length], -t.canopy * 0.35, t.height + 1.3, -t.canopy * 0.3, t.canopy * 0.62));
   }
   const rockGeometry = new THREE.DodecahedronGeometry(1);
   for (let i = 0; i < 44; i++) { const a = random() * Math.PI * 2, r = 27.5 + random() * 3.5; const rock = mesh(rockGeometry, ['#aaa79a', '#92968c', '#b5aa93'][i % 3], scene, Math.cos(a) * r, 0.15, Math.sin(a) * r); rock.scale.set(0.3 + random() * 0.45, 0.2 + random() * 0.25, 0.3 + random() * 0.45); }
@@ -345,6 +370,30 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       $('heist-hits').innerHTML = '';
     }
   }
+  // Highscore table for this page session. Every finished round is entered with the last initials
+  // used; the player can retype them (three letters or digits, arcade style). Nothing is stored or sent.
+  const highscores = []; let initials = 'BEE', entry = null, scoresDue = false;
+  const sanitize = text => text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+  function scoreRows() {
+    return highscores.map((e, i) => `<li class="${e === entry ? 'mine' : ''}"><span>${i + 1}.</span><b>${e.initials || '???'}</b><span>${e.points.toLocaleString('en')}</span><small>Round ${e.round} ${e.goal ? '🍯' : '⏱'}</small></li>`).join('');
+  }
+  function showScores() {
+    const goal = game.result === 'complete';
+    entry = { initials, points: player.points, round: game.round, goal };
+    highscores.push(entry); highscores.sort((a, b) => b.points - a.points); highscores.splice(10);
+    const rank = highscores.indexOf(entry) + 1;
+    showModal(`<p class="eyebrow">ROUND ${game.round} · HIGHSCORE</p><h2>${goal ? '🍯 Goal reached! The hive overflows.' : '⏱ Time\u2019s up.'}</h2>
+      <p>Hive: <strong>${game.honey} / ${RULES.goal} nectar</strong> · you brought <strong>${player.score}</strong><br>Your score: <strong>${player.points.toLocaleString('en')} points</strong>${rank === 1 && highscores.length > 1 ? ' · <strong>🏆 NEW HIGHSCORE!</strong>' : ''}</p>
+      ${rank ? `<form class="score-entry" id="hive-score-form"><label for="hive-initials">Your initials</label><input id="hive-initials" maxlength="3" autocomplete="off" spellcheck="false" value="${initials}"><button class="primary" type="submit">Save</button></form>` : ''}
+      <ol class="score-table" id="hive-score-table">${scoreRows()}</ol>
+      <p class="result-note">Next round in <span id="hive-next">${Math.ceil(game.remaining)}</span> s. Scores last for this page session only.</p>`);
+    audio.chime(rank === 1 ? 1318 : 1046);
+    const input = document.getElementById('hive-initials'), form = document.getElementById('hive-score-form');
+    if (!input) return;
+    const apply = () => { input.value = sanitize(input.value); initials = input.value || initials; if (entry) entry.initials = input.value; document.getElementById('hive-score-table').innerHTML = scoreRows(); };
+    input.oninput = apply; input.focus(); input.select();
+    form.onsubmit = e => { e.preventDefault(); apply(); input.blur(); form.classList.add('saved'); form.querySelector('button').textContent = '✓ Saved'; };
+  }
   function updateUI() {
     const seconds = Math.max(0, Math.ceil(game.remaining)); $('timer').textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
     $('round').textContent = String(game.round).padStart(2, '0'); $('honey').textContent = game.honey;
@@ -366,14 +415,13 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       const heavy = player.bag >= LOAD.heavy; $('bag-label').textContent = heavy ? `YOUR NECTAR · HEAVY −${Math.round((1 - loadFactor(player.bag)) * 100)}%` : 'YOUR NECTAR'; $('bag-label').classList.toggle('heavy', heavy);
       lastBag = player.bag; lastScore = player.score;
     }
-    if (started && game.result && game.result !== lastResult) {
-      $('phase').textContent = 'RESETTING';
-      const best = game.scores.map((s, i) => `${i + 1}. Round ${s.round}: ${s.points.toLocaleString('en')} points`).join('<br>');
-      showModal(`<p class="eyebrow">ROUND ${game.round}</p><h2>${game.result === 'complete' ? 'Goal reached.' : 'Time expired.'}</h2><p>Hive: <strong>${game.honey} / 300 nectar</strong><br>Your contribution: <strong>${player.score} nectar</strong><br>Your score: <strong>${player.points.toLocaleString('en')} points</strong>${game.newBest ? ' <strong>🏆 NEW HIGHSCORE!</strong>' : ''}</p><p class="result-note">Best rounds this session:<br>${best}</p><p class="result-note">Next round in 12 seconds.</p>`); audio.chime(game.newBest ? 1318 : 1046);
-    }
+    if (started && game.result && game.result !== lastResult) { $('phase').textContent = 'RESETTING'; scoresDue = true; }
+    // After a win the party plays for a few seconds before the highscore table covers it.
+    if (scoresDue && game.result && RULES.break - game.remaining >= (game.result === 'complete' ? 6 : 0.4)) { scoresDue = false; showScores(); }
     if (game.round !== lastRound) { modal.close(); $('phase').textContent = 'ACTIVE'; toast(game.best ? `New round. Best this session: ${game.best.toLocaleString('en')} points.` : 'New round.'); lastScore = 0; lastBag = 0; }
     lastResult = game.result; lastRound = game.round;
     $('alert-count').textContent = Math.ceil(game.bumbleWarn);
+    const next = document.getElementById('hive-next'); if (next && game.result) next.textContent = Math.max(0, Math.ceil(game.remaining));
   }
   function handle(events, dt) {
     for (const event of events) {
@@ -398,6 +446,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (started && event.type === 'bumble-enter' && event.mode !== 'heist' && reducedMotion) toast('Here it comes! Dodge the bumblebee!');
       if (started && event.type === 'heist-end') heistNote = { saved: event.rescued, drained: event.drained, time: 4 };
       if (started && event.type === 'power-ready') { powerTip = 3.5; powerNag = 14; }
+      if (event.type === 'round-end') { alertTime = 0; $('bumble-alert').hidden = true; endCinematic(); }
+      if (started && event.type === 'round-end' && event.result === 'complete') { toast('🍯 Goal reached! The hive overflows with honey!'); audio.play('deliver', null, { rate: 0.85 }); }
       if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = 4;
       if (event.type === 'topple') burst.emit(probe.set(event.x, event.y, event.z), { color: event.kind === 'tree' ? '#7fae5c' : '#f2a5c0', count: 22, speed: 3.4, gravity: -4, size: 0.14 });
       if (event.type === 'restore') burst.emit(probe.set(event.x, 0.6, event.z), { color: '#fff3b0', count: 10, speed: 1.6, gravity: 0, life: 0.5 });
@@ -458,7 +508,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bee.shadow.position.set(p.x, 0.07, p.z); bee.shadow.material.opacity = 0.45 - Math.min(0.3, (p.y - WORLD.floor) * 0.035);
       bee.stars.group.visible = p.stun > 0.2; if (p.stun) bee.stars.update(elapsed);
       bee.aura?.update(dt, elapsed, { active: p.powered || (own && spotlight > 0.3), boosting: game.powerBoosting(p) });
-      bee.group.visible = !(own && view === 'bee'); // Name tags of bees right in front of the camera would cover the view (tour close-ups, bee view).
+      bee.group.visible = !(own && view === 'bee' && !game.celebration); // Name tags of bees right in front of the camera would cover the view (tour close-ups, bee view).
       const near = camera.position.distanceTo(bee.group.position); bee.label.visible = cinematic.active ? false : !started ? near > 11 : (view !== 'bee' && !spotlight) || near > 6;
       bee.fuzz.userData.setLayers(fuzzLayers(near));
       if (bee.stem) { bee.stem.visible = view === 'orbit' && started; bee.stem.position.copy(bee.group.position); bee.stem.scale.y = Math.max(0.01, bee.group.position.y - 0.1); }
@@ -490,19 +540,25 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     }
     burst.update(dt);
     hiveBeacon = Math.max(0, hiveBeacon - dt); hive.update(elapsed, hiveBeacon);
-    gauge.sync(game.honey); gauge.update(dt, elapsed);
+    gauge.sync(game.honey); gauge.update(dt, elapsed); celebrate(dt, elapsed);
     motes.rotation.y = Math.sin(elapsed * 0.07) * 0.1;
     const own = player && beeModels.get(player.id);
     if (cinematic.active && cinematicFrame(dt)) { /* The bumblebee entrance placed the camera. */ }
     else if (!started && !reducedMotion) { /* The landing tour placed the camera. */ }
-    else if (view === 'bee' && own) {
+    else if (view === 'bee' && own && !game.celebration) {
       beeView.apply(camera, own.group.position, dt, elapsed, { strafe, boosting: game.boosting(player), stunned: player.stun > 0 });
       viewModel.update(elapsed, { boosting: game.boosting(player) });
     } else {
       // The garden view follows the player more on the larger island but keeps the hive in frame.
       orbitTarget.lerp(probe.set(player ? player.x * 0.55 : 0, player ? Math.max(0, player.y - 2) * 0.5 : 0, player ? player.z * 0.55 : 0), 1 - Math.exp(-dt * 3));
       orbit.apply(camera, orbitTarget);
-      if (spotlight > 0 && own) {
+      if (game.celebration) {
+        // Frame the party: the swollen hive, the honey flood, and the honeycomb of bees above it.
+        const k = ease(game.celebration.t / 2.5); spotAim.set(0, 5, 0);
+        spotEye.copy(camera.position).sub(orbitTarget).setLength(22).add(spotAim);
+        camera.position.lerp(spotEye, k); camera.lookAt(probe.copy(orbitTarget).lerp(spotAim, k));
+        if (camera.fov !== ORBIT_FOV) { camera.fov = ORBIT_FOV; camera.updateProjectionMatrix(); }
+      } else if (spotlight > 0 && own) {
         // Ease in over the first second, hold, ease out over the last 1.2 s.
         spotlight = Math.max(0, spotlight - (paused ? 0 : dt));
         const since = SPOTLIGHT - spotlight, k = Math.min(1, since / 1, spotlight / 1.2), ease = k * k * (3 - 2 * k);

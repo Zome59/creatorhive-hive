@@ -214,7 +214,7 @@ test('a heavier load slows the bee progressively, and bigger deliveries score mo
   Object.assign(bee, { x: 0, y: 2, z: 3, bag: 8 }); game.tick(0.05);
   assert.equal(bee.points, 160); assert.ok(game.events.some(e => e.type === 'deliver' && e.points === 160 && e.bonus === 2));
   game.honey = RULES.goal; game.tick(0.05); assert.equal(game.best, 160); assert.equal(game.newBest, true);
-  for (let i = 0; i < 125; i++) game.tick(0.1);
+  for (let i = 0; i < 10 * RULES.break + 5; i++) game.tick(0.1);
   assert.equal(bee.points, 0, 'points reset each round'); assert.equal(game.best, 160, 'best kept for the session');
 });
 test('a cutscene stops the round clock and keeps the player bee still and safe', () => {
@@ -248,4 +248,23 @@ test('on its raid the bumblebee usually bumbles around and knocks bees over befo
   for (let i = 0; i < 100 && !quick.bumble; i++) quick.tick(0.05);
   assert.equal(quick.bumble.roamFor, 0);
   assert.ok(hits > 0, 'it knocked bees over while roaming');
+});
+
+test('reaching the goal starts a celebration: a loop around the hive, then a honeycomb above it', async () => {
+  const { CELEBRATION } = await import('../../src/games/hive/simulation.js');
+  const game = new Game({ bots: 6 }), bee = game.addPlayer();
+  game.honey = RULES.goal; game.tick(0.05);
+  assert.equal(game.result, 'complete'); assert.ok(game.celebration);
+  assert.ok(game.events.some(e => e.type === 'round-end' && e.result === 'complete'));
+  for (let i = 0; i < 40; i++) game.tick(0.05);
+  const loop = [...game.players.values()].map(p => Math.hypot(p.x, p.z));
+  assert.ok(loop.every(r => Math.abs(r - CELEBRATION.loopRadius) < 1.5), 'all bees circle the hive');
+  for (let i = 0; i < 160; i++) game.tick(0.05);
+  assert.ok(Math.hypot(bee.x, bee.z) < 0.3 && Math.abs(bee.y - CELEBRATION.height) < 0.4, 'the player is the centre cell');
+  const ring = [...game.players.values()].filter(p => p.bot).map(p => Math.hypot(p.x, p.z));
+  assert.ok(ring.every(r => Math.abs(r - CELEBRATION.cell) < 0.3), 'six scouts form the hexagon');
+  const angles = [...game.players.values()].filter(p => p.bot).map(p => Math.atan2(p.x, p.z)).sort((a, b) => a - b);
+  angles.forEach((a, i) => { if (i) assert.ok(Math.abs(a - angles[i - 1] - Math.PI / 3) < 0.15, 'evenly spaced, 60° apart'); });
+  const lost = new Game({ bots: 0 }); lost.addPlayer(); lost.remaining = 0.01; lost.tick(0.05);
+  assert.equal(lost.result, 'time'); assert.equal(lost.celebration, null, 'no party without the goal');
 });

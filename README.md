@@ -1,6 +1,6 @@
 # The Hive
 
-Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 300 nectar in three minutes. Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
+Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 360 nectar in three minutes. Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
 
 ## Run locally
 
@@ -109,11 +109,17 @@ Touch devices show directional, climb/sink, and boost buttons; drag the garden t
 
 ### Honey in the hive
 
-A ring of 30 honeycomb cells around the hive base shows the hive's honey, one cell per 10 nectar. Delivered nectar flies into the next cells as droplets; cells you filled are **orange**, the scouts' are **gold**, and the HUD bar shows your share in orange too. When the bumblebee drinks, the newest cells empty first.
+A ring of 30 honeycomb cells around the hive base shows the hive's honey, one cell per 12 nectar. Delivered nectar flies into the next cells as droplets; cells you filled are **orange**, the scouts' are **gold**, and the HUD bar shows your share in orange too. When the bumblebee drinks, the newest cells empty first.
+
+### Goal reached
+
+When the hive reaches 360 nectar the round ends in a party: the hive swells, golden honey floods out until it covers about a third of the island, the trees turn gold, and all bees loop around the hive cheering before they form a slowly turning **honeycomb** above it (your bee in the centre, the six scouts around it). The camera frames the party; after six seconds the highscore table appears.
+
+The goal is tuned to be reachable but not trivial: in simulations, six scouts on their own rarely make it in time, and an average player who also chases the honey thief off the hive gets there with roughly a minute to spare.
 
 ### Load, points, and highscore
 
-The bees have soft **shell fur** (the surface drawn again in a few thin, outward layers with strands cut by a shader, as in real-time fur demos); the bumblebee gets 32 layers up close and in its cutscene, and fewer layers with distance. Collected nectar shows as golden pollen baskets on your bee's hind legs, growing with every drop (scouts carry theirs too). From half a bag on the load weighs you down, gently at first and more with every drop: about 6 % slower at 4 of 8, 27 % slower with a full bag. A short hint appears when you reach half a bag, and the HUD shows the current slowdown. Delivering to the hive makes you fast again and scores **10 points per nectar**, with a **×1.5 bonus for 6–7 drops and ×2 for a full bag**, so you choose between quick trips and big, slow, risky ones. The HUD shows your score and the best round of this page session; the round result lists your best rounds and celebrates a new highscore. Like everything else in the game, scores are not stored and are gone after a page refresh.
+The bees have soft **shell fur** (the surface drawn again in a few thin, outward layers with strands cut by a shader, as in real-time fur demos); the bumblebee gets 32 layers up close and in its cutscene, and fewer layers with distance. Collected nectar shows as golden pollen baskets on your bee's hind legs, growing with every drop (scouts carry theirs too). From half a bag on the load weighs you down, gently at first and more with every drop: about 6 % slower at 4 of 8, 27 % slower with a full bag. A short hint appears when you reach half a bag, and the HUD shows the current slowdown. Delivering to the hive makes you fast again and scores **10 points per nectar**, with a **×1.5 bonus for 6–7 drops and ×2 for a full bag**, so you choose between quick trips and big, slow, risky ones. The HUD shows your score and the best round of this page session. After every round, won or not, the **highscore table** (top 10 of this page session) appears with your entry already added under your last initials; type up to three letters or digits to change them, arcade style. Scores and initials are kept in memory only and are gone after a page refresh.
 
 ### Nectar power
 
@@ -137,7 +143,7 @@ Sound starts with **▶** and can be muted with the **♪** button. The **🎚 S
 
 - All game state lives in memory in the browser. Refreshing clears it.
 - No accounts, custom names, chat, persistent player identifiers, cookies, browser storage, telemetry, analytics, or external game connections.
-- The player's alias is generated (`Bee 007`). No personal information is requested.
+- The player's alias is generated (`Bee 007`). No personal information is requested. The optional highscore initials (at most three letters or digits) live in memory for the page session only; they are never stored or sent.
 - Art and fonts are procedural or local. Honey Retrieval's sound effects are small AI-generated MP3 files stored in this repository and served locally. No remote assets or runtime CDN requests.
 - This repository contains no CreatorHive user data or integration with its accounts, platform, or livestream service.
 - A local development/preview server necessarily handles browser connections. The game does not record connection addresses or add access logging.

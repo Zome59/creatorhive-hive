@@ -59,6 +59,9 @@ export function createReactions({ random = Math.random } = {}) {
         if (witness && !thudTalk) { thudTalk = 2; out.push({ kind: 'say', id: witness.id, text: pick(LINES.topple), voice: true, delay: 0.4 }); }
       } else if (event.type === 'restore' && near(event)) {
         out.push({ kind: 'pow', text: pick(TOPPLE.restore), style: 'bump', x: event.x, y: event.y, z: event.z });
+      } else if (event.type === 'round-end' && event.result === 'complete') {
+        // Everyone cheers, one after another, while they fly their victory loop.
+        [...game.players.values()].filter(p => p.bot).forEach((p, i) => out.push({ kind: 'say', id: p.id, text: pick(LINES.cheer), voice: i < 2, delay: 0.6 + i * 0.55 }));
       } else if (event.type === 'bumble-thud') {
         out.push({ kind: 'pow', text: pick(SOUNDS.thud), style: 'thud', x: event.x, y: event.y, z: event.z });
         if (random() < 0.5) out.push({ kind: 'say', id: 'bumble', text: pick(LINES.bumbleThud), style: 'bumble', delay: 0.3 });
