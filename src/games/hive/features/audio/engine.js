@@ -27,7 +27,7 @@ async function defaultLoad(file) {
 
 // Created on the first play gesture. Loops are keyed (one buzz per bee); one-shots are fire-and-forget.
 export function createHiveAudio({ createContext = defaultContext, load = defaultLoad, random = Math.random } = {}) {
-  let context = null, master, enabled = false, running = false, volume = 1.3, mix = 1;
+  let context = null, master, enabled = false, running = false, volume = 1.8, mix = 1;
   const buffers = new Map(), loops = new Map(), voices = new Set(), buses = new Map(), requested = new Set();
   const levels = new Map(MIXER.map(channel => [channel.id, 1]));
   const output = bus => buses.get(bus) ?? master;
@@ -59,7 +59,8 @@ export function createHiveAudio({ createContext = defaultContext, load = default
   }
   function panner() {
     const node = context.createPanner();
-    Object.assign(node, { panningModel: 'HRTF', distanceModel: 'inverse', refDistance: SPATIAL.ref, rolloffFactor: SPATIAL.rolloff, maxDistance: SPATIAL.max });
+    // Plain stereo panning: HRTF colours every sound by direction and makes the buzz sound muffled and filtered.
+    Object.assign(node, { panningModel: 'equalpower', distanceModel: 'inverse', refDistance: SPATIAL.ref, rolloffFactor: SPATIAL.rolloff, maxDistance: SPATIAL.max });
     return node;
   }
   function place(node, { x, y, z }, smooth = true) {
@@ -81,6 +82,8 @@ export function createHiveAudio({ createContext = defaultContext, load = default
   }
   return {
     get enabled() { return enabled; },
+    // True once the browser actually lets the sound play (some block it until the first click or key).
+    get playing() { return !!context && context.state === 'running'; },
     get ready() { return buffers.size > 0; },
     level(id) { return levels.get(id) ?? 1; },
     // Mixer slider: 0 (silent) to MIX_MAX; applies immediately and to sounds created later.

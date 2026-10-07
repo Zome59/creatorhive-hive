@@ -71,12 +71,12 @@ test('the sound mixer scales master and each channel, clamps levels, and resets 
   assert.ok(HIVE_SOUNDS.every(sound => MIXER.some(channel => channel.id === sound.bus)), 'every sound has a mixer channel');
   const [master, ...buses] = context.made.gains;
   assert.equal(buses.length >= MIXER.length - 1, true, 'one gain per channel');
-  audio.setLevel('master', 0.5); assert.ok(Math.abs(master.gain.value - 1.3 * 0.25) < 1e-9, 'sliders follow the ear: half is a quarter of the gain');
+  audio.setLevel('master', 0.5); assert.ok(Math.abs(master.gain.value - 1.8 * 0.25) < 1e-9, 'sliders follow the ear: half is a quarter of the gain');
   audio.setLevel('effects', 0.4); assert.equal(audio.level('effects'), 0.4);
   assert.ok(buses.some(bus => Math.abs(bus.gain.value - 0.16) < 1e-9), 'effects channel gain follows the slider (squared)');
   audio.setLevel('voices', 9); assert.equal(audio.level('voices'), 1.5, 'clamped to 150 %');
   audio.setLevel('nope', 0.2); assert.equal(audio.level('nope'), 1);
-  audio.resetLevels(); assert.ok(MIXER.every(channel => audio.level(channel.id) === 1)); assert.ok(Math.abs(master.gain.value - 1.3) < 1e-9);
+  audio.resetLevels(); assert.ok(MIXER.every(channel => audio.level(channel.id) === 1)); assert.ok(Math.abs(master.gain.value - 1.8) < 1e-9);
 });
 test('gibberish voices are spaced out and calm remarks only sometimes get one', async () => {
   const played = [], audio = { enabled: true, play: (name, at, options) => { played.push(name); return true; }, listen() {}, loop() {}, keep() {} };

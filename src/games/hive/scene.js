@@ -51,7 +51,15 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   $('view').disabled = true;
   // The landing screen plays quietly from the first click or key press (browsers need a gesture for sound).
   const INTRO_MIX = 0.35; // a light mix on the landing screen; the round start fades up to the full default
-  function introSound() { if (active && !started && soundOn && !audio.enabled) { audio.setMix(INTRO_MIX, 0); audio.setEnabled(true); $('sound-hint').hidden = true; } }
+  // The landing screen plays the garden and its music quietly: right away if the browser allows it, otherwise
+  // from the first click, key or touch. Starting the round fades everything up to the normal mix.
+  let unlockClick = false; // the click that only switched the sound on (the browser had blocked it) does not start the round
+  function introSound(event) {
+    if (!active || started || !soundOn) return;
+    if (event?.type === 'pointerdown' && !audio.playing && !event.target?.closest?.('#start')) unlockClick = true;
+    if (!audio.enabled) { audio.setMix(INTRO_MIX, 0); audio.setEnabled(true); } else audio.resume();
+    setTimeout(() => { if (audio.playing) $('sound-hint').hidden = true; }, 60);
+  }
   document.addEventListener('pointerdown', introSound, true); document.addEventListener('keydown', introSound, true);
   $('start').onclick = () => {
     if (!renderer || started) return;
@@ -68,8 +76,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   // On the landing screen a click anywhere in the garden starts the round, not only the ▶ button.
   let pressAt = null;
   renderer.domElement.addEventListener('pointerdown', event => { pressAt = { x: event.clientX, y: event.clientY }; if (flyover >= 0 && flyover < FLY.circle + FLY.swoop) skipFlyover(); });
-  renderer.domElement.addEventListener('click', event => { if (active && !started && !modal.open && (!pressAt || Math.hypot(event.clientX - pressAt.x, event.clientY - pressAt.y) < 8)) $('start').click(); });
-  root.addEventListener('click', event => { if (active && !started && !modal.open && !event.target.closest?.('button, a, input, select, label, summary, details, #controls-panel')) $('start').click(); });
+  const startByClick = () => { if (unlockClick) { unlockClick = false; return; } $('start').click(); };
+  renderer.domElement.addEventListener('click', event => { if (active && !started && !modal.open && (!pressAt || Math.hypot(event.clientX - pressAt.x, event.clientY - pressAt.y) < 8)) startByClick(); });
+  root.addEventListener('click', event => { if (active && !started && !modal.open && !event.target.closest?.('button, a, input, select, label, summary, details, #controls-panel')) startByClick(); else if (event.target.closest?.('button, a, input, select, label, summary, details, #controls-panel')) unlockClick = false; });
   let autoPaused = false; // paused only because the window lost focus: coming back resumes on its own
   function togglePause() {
     if (!started) return;
@@ -525,7 +534,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (w) {
       $('boss-hits').innerHTML = Array.from({ length: 5 }, (_, i) => `<i class="${i < w.hits ? 'hit' : ''}"></i>`).join('');
       const swarm = [...game.players.values()].filter(p => p.bot && p.swarmSlot >= 0 && !p.ko).length, down = [...game.players.values()].filter(p => p.ko).length;
-      $('boss-swarm').textContent = w.hits >= 5 ? 'DEFEATED' : `swarm ${swarm} · down ${down}`;
+      $('boss-swarm').textContent = w.hits >= WASP.hits ? 'DEFEATED' : `HP ${WASP.hp - w.hits * WASP.hp / WASP.hits}/${WASP.hp} · swarm ${swarm} · down ${down}`;
     }
     const asking = fight && (w.swarm === 'none' || w.swarm === 'gathered');
     $('swarm-prompt').hidden = !asking;
@@ -564,6 +573,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (t === 'wasp-shake') { bubbles.pow(event, 'SHAKE!', 'bumble'); say('wasp', ['GET OFF ME!', 'Pests!', 'ENOUGH!'], { style: 'bumble' }); }
     if (t === 'wasp-hit') {
       boss.hit(); bubbles.pow(event, ['BONK!', 'WHAM!', 'BOOF!', 'SPLAT!', 'KAPOW!'][Math.min(4, event.hits - 1)], 'bumble');
+      bubbles.pow({ x: event.x + 0.7, y: event.y + 1.6, z: event.z }, `−${WASP.hp / WASP.hits}`, 'damage'); // floating damage, like in an RPG
       burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffe066', count: 30, speed: 4.5, gravity: -4 }); beeView.bump(0.8);
       if (event.hits === 1) toast('Slam! Four more: climb up and do it again. The bar shows your hits.'); // later hits show in the boss bar (queued toasts would lag behind)
     }
@@ -986,7 +996,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     update,
     pause() { if (started && !paused) togglePause(); },
     resize(w, h) { width = w; height = h; camera.aspect = w / h; camera.updateProjectionMatrix(); placePanel(); },
-    activate() { active = true; container.replaceChildren(root); onFullscreen(); placePanel(); renderer.domElement.setAttribute('aria-label', 'A floating garden with bees and a golden hive'); if (!paused) audio.resume(); updateUI(); },
+    activate() { active = true; container.replaceChildren(root); onFullscreen(); placePanel(); renderer.domElement.setAttribute('aria-label', 'A floating garden with bees and a golden hive'); if (!paused) audio.resume(); if (!started) introSound(); updateUI(); },
     deactivate() { active = false; endCinematic(); release(); viewControls.cancel(); look.release(); audio.suspend(); root.remove(); },
   };
 }

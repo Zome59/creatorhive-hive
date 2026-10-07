@@ -55,6 +55,7 @@ test('beating the wasp shows HIVE DEFENDED while the scouts fly in formation; lo
     game.wasp.hits = WASP.hits - 1;
     const h = waspHead(game.wasp); Object.assign(player, { x: h.x, y: h.y + 2.5, z: h.z, stun: 0 });
     step(); key('Space'); step(Math.ceil((WASP.slam.time + 0.2) / 0.05));
+    assert.ok([...container.querySelectorAll('.pow.damage')].some(e => e.textContent === `−${WASP.hp / WASP.hits}`), 'a red damage number floats up');
     assert.equal(game.wasp.phase, 'fall', 'the fifth slam knocks it down');
     step(Math.ceil((WASP.down.fall + WASP.down.struggle + WASP.down.right + 0.5) / 0.05));
     assert.equal(game.wasp.phase, 'flee');

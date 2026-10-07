@@ -11,7 +11,8 @@ export const WASP = Object.freeze({
   cruise: 3.6, lunge: 4.8, catch: 1.7, struggle: 3.2, huntFor: 34, rest: 1.4, warmup: 2.5, // slow enough for the player to react
   head: Object.freeze({ forward: 0.99, up: 0.13 }), body: 1.7, // head offset from the body centre (as in wasp-model.js); body collision radius
   ride: 2.2, mobbed: Object.freeze([4.5, 6.5]), shake: 0.9, step: 4.5, advance: 2.6,
-  hits: 5, slam: Object.freeze({ range: 1.9, above: Object.freeze([0.4, 7.5]), time: 0.42, bounce: 7.5 }),
+  hits: 5, hp: 100, // each slam takes hp / hits (shown as a floating damage number)
+  slam: Object.freeze({ range: 1.9, above: Object.freeze([0.4, 7.5]), time: 0.42, bounce: 7.5 }),
   hiveReach: WORLD.hive.radius + 2.4, perch: 5.6,
   raid: Object.freeze({ kick: 4.6, eat: 4.2, leave: 3, steal: 0.75 }),
   down: Object.freeze({ fall: 1.0, struggle: 2.6, right: 1.2, leave: 3.6 }), bonus: 150,

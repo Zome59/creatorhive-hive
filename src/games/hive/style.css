@@ -387,3 +387,6 @@
 .garden-ui .victory { animation: none; }
 
 }
+
+/* Floating damage on the wasp: a big red number that rises and fades (like an RPG). */
+.garden-ui .pow.damage { padding: 0; background: none; clip-path: none; color: #ff2d2d; font: 900 42px / 1 Impact, 'Arial Black', sans-serif; letter-spacing: 1px; text-shadow: 0 0 2px #fff, 2px 2px 0 #3a0000, -2px -2px 0 #3a0000, 2px -2px 0 #3a0000, -2px 2px 0 #3a0000, 0 0 16px #ff000099; }

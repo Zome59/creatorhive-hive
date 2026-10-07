@@ -22,6 +22,10 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
   const xAxis = new THREE.Vector3(), out = new THREE.Vector3(), X = new THREE.Vector3(1, 0, 0), euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const fleeEye = new THREE.Vector3(), fleeLook = new THREE.Vector3();
   const eye = new THREE.Vector3(), look = new THREE.Vector3(), mix = new THREE.Vector3(), lookMix = new THREE.Vector3(), swarmAt = new THREE.Vector3();
+  // Hit flash: every material with an emissive colour glows red for a moment when a slam lands.
+  const flashing = [], RED = new THREE.Color('#ff1a1a');
+  model.group.traverse(o => { for (const m of [].concat(o.material ?? [])) if (m?.emissive && !flashing.some(f => f.m === m)) flashing.push({ m, base: m.emissive.clone(), intensity: m.emissiveIntensity ?? 1 }); });
+  let flash = 0;
   let mode = 'fly', modeT = 0, lastYaw = 0, bank = 0, camWeight = 0, cineFov = 0, exit = 0, seen = false;
   const EXIT = 1.3, drift = new THREE.Vector3(), last = new THREE.Vector3();
   // The beaten wasp's farewell: a star pings in the sky where it disappears.
@@ -82,6 +86,7 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
         return;
       }
       g.visible = true; g.scale.setScalar(1); modeT += dt; seen = true; exit = 0; lastPhase = w.phase;
+      if (flash > 0 || flashing.some(f => f.dirty)) { flash = Math.max(0, flash - dt * 3.5); for (const f of flashing) { f.m.emissive.copy(f.base).lerp(RED, flash); f.m.emissiveIntensity = f.intensity + flash * 1.4; f.dirty = flash > 0; } }
       pose(w, dt, game);
       if (w.phase === 'flee') { g.rotation.z += Math.sin(elapsed * 9) * 0.35; g.rotation.x += Math.sin(elapsed * 6) * 0.15; } // reeling, dizzy
       drift.copy(g.position).sub(last).divideScalar(Math.max(dt, 1e-3)); last.copy(g.position);
@@ -94,7 +99,7 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
       target.visible = !!near;
       if (near) { target.position.set(h.x, h.y + 1.2, h.z); target.scale.setScalar(1 + Math.sin(elapsed * 6) * 0.08); target.material.opacity = slamReady ? 0.95 : 0.3; target.material.color.set(slamReady ? '#ffe14a' : '#ffffff'); }
     },
-    hit() { model.hit(); },
+    hit() { model.hit(); flash = 1; },
     // Camera shots for the big moments. Blends from the normal garden camera (`baseLook` is where it looks).
     camera(dt, camera, game, player, baseLook) {
       const w = game.wasp;
