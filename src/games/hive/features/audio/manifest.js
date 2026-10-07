@@ -18,9 +18,9 @@ export const HIVE_SOUNDS = Object.freeze([
   { name: 'dizzy', gain: 0.4, bus: 'effects' },
   { name: 'slurp', gain: 0.55, bus: 'bumblebee' },
   { name: 'rain', loop: true, gain: 0.35, bus: 'effects' },
-  { name: 'brook', loop: true, gain: 0.55, bus: 'ambience' },
+  { name: 'brook', loop: true, gain: 0.2, bus: 'ambience' },
   { name: 'shake', gain: 0.6, bus: 'own' },
-  { name: 'music-synthwave', loop: true, gain: 0.065, bus: 'music', lazy: true },
+  { name: 'music-synthwave', loop: true, gain: 0.1, bus: 'music', lazy: true },
   { name: 'music-meadow', loop: true, gain: 0.14, bus: 'music', lazy: true },
 ]);
 export const soundFiles = sound => sound.variants ? Array.from({ length: sound.variants }, (_, i) => `${sound.name}-${i + 1}`) : [sound.name];

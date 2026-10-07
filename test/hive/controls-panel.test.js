@@ -37,6 +37,12 @@ test('the side controls panel lists altitude keys, lights held keys, follows the
     container.querySelector('#mixer-reset').click();
     assert.ok(sliders.every(s => s.value === '100' && s.nextElementSibling.textContent === '100%'));
     container.querySelector('#controls-close').click(); assert.equal(panel.hidden, true);
+    // Leaving the window pauses; coming back resumes on its own, but a pause you chose (P) stays.
+    const phase = () => container.querySelector('#phase').textContent;
+    browserWindow.dispatchEvent(new browserWindow.Event('blur')); assert.equal(phase(), 'PAUSED');
+    browserWindow.dispatchEvent(new browserWindow.Event('focus')); assert.equal(phase(), 'ACTIVE');
+    press('keydown', 'KeyP'); press('keyup', 'KeyP'); assert.equal(phase(), 'PAUSED');
+    browserWindow.dispatchEvent(new browserWindow.Event('blur')); browserWindow.dispatchEvent(new browserWindow.Event('focus')); assert.equal(phase(), 'PAUSED', 'a chosen pause stays');
     hive.deactivate();
   } finally {
     for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }

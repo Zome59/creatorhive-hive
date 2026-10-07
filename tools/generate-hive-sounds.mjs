@@ -47,8 +47,9 @@ export const RECIPES = {
   'music-synthwave': { model: MUSIC, seed: 301, settings: INSTRUMENTAL, music: { from: 6, length: 70 }, prompt: 'Warm, mellow instrumental synthwave for a cozy video game set in a sunny flower garden full of bees: steady relaxed groove around 100 BPM, soft gated drums, round analog bass, shimmering arpeggiated synths, dreamy pads, retro 1980s feel, positive and laid back, consistent energy without breaks or big drops, no vocals.' },
   // Pure nature, no instruments: a summer meadow mixed locally from short field-recording-style layers.
   // No birds (they sounded like gulls in the mix): bed clips 405, 407 and 408 carried chirps too, so only 406 (played forwards and backwards).
-  // A high-pass keeps the bed free of low rumble.
-  'music-meadow': { scape: { length: 80, bed: [406], brook: [421, 422] }, filter: 'highpass=f=160:poles=2' },
+  // Instead of a dull low-pass, the filter cuts only the narrow insect tone around 5 kHz and tames the hiss above 6 kHz,
+  // so the breeze keeps its air; a high-pass keeps it free of low rumble.
+  'music-meadow': { scape: { length: 80, bed: [406], brook: [421, 422] }, bitrate: '128k', filter: 'highpass=f=160:poles=2,equalizer=f=4950:t=q:w=2.2:g=-15,equalizer=f=4500:t=q:w=4:g=-5,equalizer=f=5600:t=q:w=4:g=-5,highshelf=f=3500:g=-5,equalizer=f=7600:t=q:w=1.4:g=-8,lowpass=f=10000,volume=11.5dB' },
   'meadow-bed': { duration: 10, prompt: 'Peaceful summer meadow ambience: only a very soft warm breeze through tall grass and leaves, gentle rustling, calm and continuous, natural field recording, no insects, no crickets, no grasshoppers, no birds, no water, no music, no voices.' },
   'meadow-birds': { duration: 10, prompt: 'A few summer songbirds chirping and singing in a meadow nearby, short cheerful phrases with quiet pauses in between, natural field recording, soft breeze, no music, no voices.' },
   'meadow-brook': { duration: 10, prompt: 'A small gentle brook babbling over pebbles in a meadow, soft continuous trickling water, calm natural field recording, no birds, no music, no voices.' },
@@ -183,21 +184,19 @@ function loop(samples, { from, length }) {
   for (let i = 0; i < fade; i++) { const t = i / fade * Math.PI / 2; out[i] = out[i] * Math.sin(t) + samples[start + size + i] * Math.cos(t); }
   return level(out, -18);
 }
-function encode(name, samples, channels = 1, filter = null) {
+function encode(name, samples, channels = 1, filter = null, bitrate = '64k') {
   const temp = resolve(cache, `${name}.f32`);
   writeFileSync(temp, Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength));
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'f32le', '-ar', String(RATE), '-ac', String(channels), '-i', temp, ...(filter ? ['-af', filter] : []), '-c:a', 'libmp3lame', '-b:a', '64k', '-map_metadata', '-1', resolve(output, `${name}.mp3`)]);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'f32le', '-ar', String(RATE), '-ac', String(channels), '-i', temp, ...(filter ? ['-af', filter] : []), '-c:a', 'libmp3lame', '-b:a', bitrate, '-map_metadata', '-1', resolve(output, `${name}.mp3`)]);
   rmSync(temp);
 }
 // Summer meadow: a grass-and-crickets bed chained from several clips, a brook that drifts in and out,
 // and optionally a few short bird phrases placed left and right. Built a little longer than the loop, then crossfaded.
 function soundscape({ length, bed, birds = [], brook }) {
   const clip = (name, seed) => decode(resolve(cache, `${name}-${seed}.wav`));
-  // Three one-pole low-passes (about 1.5 kHz) keep the grass bed a soft, dark breeze: no high chirps.
-  const soften = x => { for (let pass = 0; pass < 3; pass++) { let y = x[0]; for (let i = 0; i < x.length; i++) { y += (x[i] - y) * 0.2; x[i] = y; } } return x; };
   const size = Math.round((length + 3) * RATE), out = new Float32Array(size * 2), fade = Math.round(2 * RATE);
   // Each bed clip also plays reversed: a breeze sounds the same backwards and the chain repeats less.
-  const bedClips = bed.flatMap(seed => { const c = soften(clip('meadow-bed', seed)); return [c, c.slice().reverse()]; }), bedLevel = 10 ** (-26 / 20);
+  const bedClips = bed.flatMap(seed => { const c = clip('meadow-bed', seed); return [c, c.slice().reverse()]; }), bedLevel = 10 ** (-26 / 20);
   let at = 0, k = 0;
   while (at < size) {
     const c = bedClips[[0, 1, 2, 3, 2, 0, 3, 1][k++ % 8] % bedClips.length], scale = bedLevel / Math.max(1e-6, rms(c));
@@ -207,7 +206,7 @@ function soundscape({ length, bed, birds = [], brook }) {
     }
     at += c.length - fade;
   }
-  const brookClips = brook.map(seed => clip('meadow-brook', seed)), brookLevel = 10 ** (-29 / 20), brookRms = brookClips.map(c => Math.max(1e-6, rms(c)));
+  const brookClips = brook.map(seed => clip('meadow-brook', seed)), brookLevel = 10 ** (-37 / 20), brookRms = brookClips.map(c => Math.max(1e-6, rms(c)));
   for (let i = 0; i < size; i++) {
     const t = i / RATE, swell = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 16) / 34)))) ** 1.5; // audible from about 16 s to 50 s
     if (!swell) continue;
@@ -268,8 +267,8 @@ if (explore) {
   for (const name of names) {
     const recipe = RECIPES[name];
     if (recipe.from) { encode(name, recipe.chime ? level(chime(finished.get(recipe.from), recipe.chime), -17) : flyby(finished.get(recipe.from), recipe.flyby)); console.log(`${name}: derived from ${recipe.from}`); continue; }
-    if (recipe.scape) { encode(name, soundscape(recipe.scape), 2, recipe.filter); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
-    if (recipe.music) { encode(name, musicLoop(resolve(cache, `${name}-${recipe.seed}.wav`), recipe.music), 2); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
+    if (recipe.scape) { encode(name, soundscape(recipe.scape), 2, recipe.filter, recipe.bitrate); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
+    if (recipe.music) { encode(name, musicLoop(resolve(cache, `${name}-${recipe.seed}.wav`), recipe.music), 2, null, recipe.bitrate ?? '96k'); console.log(`${name}: ${(readFileSync(resolve(output, `${name}.mp3`)).length / 1024).toFixed(1)} KiB`); continue; }
     let samples = decode(resolve(cache, `${recipe.clip ?? name}-${recipe.seed}.wav`), recipe.pitch);
     if (recipe.tone) {
       const { from, length } = recipe.loop, texture = samples.slice(Math.round(from * RATE));

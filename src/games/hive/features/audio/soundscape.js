@@ -23,7 +23,8 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
         // Each bee keeps its own pitch; speed and boost raise it, a stunned bee wobbles.
         const pitch = 0.9 + (bee.id * 0.137 % 0.25) + Math.min(speed, 13) / 40 + (game.boosting(bee) ? 0.1 : 0) + (bee.stun ? Math.sin(bee.stun * 18) * 0.08 : 0);
         keys.add(key);
-        audio.loop(key, 'buzz', { ...at(bee), spatial: !own, gain: own ? (beeView ? 0.2 : 0.12) : 1, rate: pitch, bus: own ? 'own' : 'bees' });
+        // Your own bee stays softly audible under everything.
+        audio.loop(key, 'buzz', { ...at(bee), spatial: !own, gain: own ? (beeView ? 0.55 : 0.4) : 1, rate: pitch, bus: own ? 'own' : 'bees' });
         if (own || !player) continue;
         // "Bsss": a quick fly-by when a scout zips past close to the player.
         const d = Math.hypot(bee.x - player.x, bee.y - player.y, bee.z - player.z);

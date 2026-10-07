@@ -57,9 +57,10 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     toast('Fly near the honey drops to collect. Space / C to climb and sink. V for bee view.'); $('intro-best').hidden = true;
     spotlight = SPOTLIGHT; bubbles.say(player.id, 'That\u2019s you!', { delay: 0.6 });
   };
+  let autoPaused = false; // paused only because the window lost focus: coming back resumes on its own
   function togglePause() {
     if (!started) return;
-    paused = !paused; release(); viewControls.cancel(); look.release();
+    paused = !paused; autoPaused = false; release(); viewControls.cancel(); look.release();
     paused ? audio.suspend() : audio.resume();
     $('pause').textContent = paused ? '▶' : 'Ⅱ'; $('pause').setAttribute('aria-label', paused ? 'Resume game' : 'Pause game'); $('phase').textContent = paused ? 'PAUSED' : 'ACTIVE';
     toast(paused ? 'Paused. Press P to resume.' : 'Resumed.');
@@ -189,8 +190,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     }
   });
   document.addEventListener('keyup', e => { keys.delete(e.code); syncHeld(); });
-  window.addEventListener('blur', () => { release(); viewControls.cancel(); if (active && started && !paused) togglePause(); if (active && !started) audio.suspend(); });
-  window.addEventListener('focus', () => { if (active && !started) audio.resume(); });
+  window.addEventListener('blur', () => { release(); viewControls.cancel(); if (active && started && !paused) { togglePause(); autoPaused = true; } if (active && !started) audio.suspend(); });
+  window.addEventListener('focus', () => { if (active && !started) audio.resume(); if (active && started && paused && autoPaused && !modal.open) togglePause(); });
   for (const button of root.querySelectorAll('[data-key]')) {
     button.addEventListener('pointerdown', e => { e.preventDefault(); button.setPointerCapture(e.pointerId); keys.add(button.dataset.key); syncHeld(); });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => { keys.delete(button.dataset.key); syncHeld(); });
