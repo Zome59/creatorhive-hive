@@ -2,6 +2,22 @@ import * as THREE from 'three';
 import { WASP, waspHead } from './wasp.js';
 import { createWasp, WASP as SHAPE } from './wasp-model.js';
 import { createDizzyStars } from './models.js';
+import { OBSTACLES, contact } from '../world.js';
+
+// For the knock-out shot: of eight directions around the wasp, the one nearest the preferred one whose line of
+// sight is not blocked by a tree, flower or bush (sampled along the line, keeping half a metre of air).
+export function clearShot(w, preferred, { distance = 8, height = 3.6, standing = () => true } = {}) {
+  for (const step of [0, 1, -1, 2, -2, 3, -3, 4]) {
+    const a = preferred + step * Math.PI / 4, ex = w.x + Math.sin(a) * distance, ez = w.z + Math.cos(a) * distance;
+    let blocked = false;
+    for (let k = 1; k < 12 && !blocked; k++) {
+      const t = k / 12, x = ex + (w.x - ex) * t, y = height + (0.8 - height) * t, z = ez + (w.z - ez) * t;
+      for (const o of OBSTACLES) if (o.kind !== 'hive' && standing(o) && Math.abs(o.x - x) < 5 && Math.abs(o.z - z) < 5 && contact(o, x, y, z).gap < 0.5) { blocked = true; break; }
+    }
+    if (!blocked) return a;
+  }
+  return preferred;
+}
 
 // Scene side of the boss fight: places and poses the wasp model for every phase of the simulation, shows the
 // slam target over its head, and directs the camera (the climb over the rim, the swarm's attack ride, the
@@ -21,6 +37,7 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
   const climbQ = new THREE.Quaternion(), flyQ = new THREE.Quaternion(), spin = new THREE.Quaternion(), basis = new THREE.Matrix4();
   const xAxis = new THREE.Vector3(), out = new THREE.Vector3(), X = new THREE.Vector3(1, 0, 0), euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const fleeEye = new THREE.Vector3(), fleeLook = new THREE.Vector3();
+  let knockout = null; // the camera direction chosen for the knock-out shot
   const eye = new THREE.Vector3(), look = new THREE.Vector3(), mix = new THREE.Vector3(), lookMix = new THREE.Vector3(), swarmAt = new THREE.Vector3();
   // Hit flash: every material with an emissive colour glows red for a moment when a slam lands.
   const flashing = [], RED = new THREE.Color('#ff1a1a');
@@ -121,8 +138,9 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
           const dx = w.x - player.x, dz = w.z - player.z, d = Math.hypot(dx, dz) || 1;
           eye.set(player.x - dx / d * 7.5, player.y + 2.6, player.z - dz / d * 7.5); look.set((player.x + w.x) / 2, (player.y + w.y) / 2, (player.z + w.z) / 2); want = 1; fov = 46;
         } else if (w.phase === 'fall' || w.phase === 'onBack' || (w.phase === 'rightItself' && w.t < 0.8)) { // the big moment: on its back, legs in the air
-          const a = (w.angle ?? 0) + Math.PI * 0.75 + (w.phase === 'onBack' ? w.t * 0.12 : 0);
-          eye.set(w.x + Math.sin(a) * 8, 3.4, w.z + Math.cos(a) * 8); look.set(w.x, 0.8, w.z); want = 1; fov = 42;
+          knockout ??= clearShot(w, (w.angle ?? 0) + Math.PI * 0.75, { standing: o => game.standing(o) }); // a view no tree is in the way of
+          const a = knockout + (w.phase === 'onBack' ? w.t * 0.12 : 0);
+          eye.set(w.x + Math.sin(a) * 8, 3.6, w.z + Math.cos(a) * 8); look.set(w.x, 0.8, w.z); want = 1; fov = 42;
         } else if (w.phase === 'flee') { // follow it as it reels off over the rim, until it is a speck in the sky
           const ox2 = w.x / (Math.hypot(w.x, w.z) || 1), oz2 = w.z / (Math.hypot(w.x, w.z) || 1);
           eye.set(w.x - ox2 * 8 - oz2 * 3, w.y + 2.2, w.z - oz2 * 8 + ox2 * 3); look.set(w.x, w.y, w.z); want = 1; fov = 44; fleeEye.copy(eye); fleeLook.copy(look);
@@ -132,6 +150,7 @@ export function createWaspBoss(scene, { onExit = () => {}, inView = () => true }
         }
         void h;
       }
+      if (!w) knockout = null;
       if (!w && twinkleT > 0) { eye.copy(fleeEye); look.copy(fleeLook).lerp(twinkle.position, 0.6); want = 1; fov = 44; } // hold on the ping in the sky
       camWeight += (want - camWeight) * Math.min(1, dt * (want ? 2.6 : 1.8));
       if (want) cineFov = fov;

@@ -496,7 +496,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (charged) { powerNag -= dt; if (powerNag <= 0) { powerTip = readingTime($('power-tip').textContent); powerNag = 30; } } else { powerTip = 0; powerNag = 30; }
     powerTip = Math.max(0, powerTip - dt); loadTip = Math.max(0, loadTip - dt);
     // Only one hint at a time: the power reminder wins.
-    $('power-tip').hidden = !powerTip; $('load-tip').hidden = !loadTip || !!powerTip;
+    $('power-tip').hidden = !powerTip; $('load-tip').hidden = !loadTip || !!powerTip || !!demo; // the demo pilot carries a heavy bag on purpose
     root.classList.toggle('top-busy', !$('bumble-alert').hidden || !$('heist-banner').hidden); root.classList.toggle('powered', !!(started && player?.powered));
   }
   const heistOutcome = (saved, drained) => saved ? `You knocked the bumblebee off the hive. It got away with ${drained} nectar.` : `The bumblebee flew off with ${drained} nectar.`;

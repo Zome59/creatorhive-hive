@@ -118,3 +118,14 @@ test('with the wasp switched off the round is 3:30 for 400 nectar and no wasp ap
   game.bumbleDone = game.heistDone = true; game.remaining = 20; run(game, 15); assert.equal(game.wasp, null, 'no boss');
   game.setBoss(true); game.restartClock(); assert.equal(game.remaining, 240); assert.equal(game.goal, 450); assert.equal(game.waspDone, false);
 });
+
+test('the knock-out shot looks past trees: a view through a canopy is swapped for a clear one', async () => {
+  const { clearShot } = await import('../../src/games/hive/features/wasp-boss.js');
+  const { TREES, OBSTACLES, contact } = await import('../../src/games/hive/world.js');
+  const tree = TREES.find(t => t.inside), w = { x: tree.x + 2.5, z: tree.z };
+  const through = Math.atan2(tree.x - w.x, tree.z - w.z); // straight through the trunk and the canopy
+  const blocked = a => { const ex = w.x + Math.sin(a) * 8, ez = w.z + Math.cos(a) * 8; for (let k = 1; k < 12; k++) { const t = k / 12, x = ex + (w.x - ex) * t, y = 3.6 + (0.8 - 3.6) * t, z = ez + (w.z - ez) * t; if (OBSTACLES.some(o => o.kind !== 'hive' && contact(o, x, y, z).gap < 0.5)) return true; } return false; };
+  assert.ok(blocked(through), 'the preferred view is blocked (positive control)');
+  const a = clearShot(w, through);
+  assert.ok(!blocked(a), 'the chosen view is clear'); assert.notEqual(a, through);
+});

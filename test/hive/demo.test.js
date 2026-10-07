@@ -16,11 +16,11 @@ function run(seed) {
   return { plan: demo.plan, t, seen, mine, done: demo.done };
 }
 
-test('the demo shows every kind of event within about a minute, in a random order, and ends by itself', () => {
+test('the demo shows every kind of event within about a minute and a half, in a random order, and ends by itself', () => {
   const runs = [1, 2, 3, 4, 5, 6, 7, 8].map(run);
   for (const r of runs) {
     const where = `seed plan ${JSON.stringify(r.plan)}`;
-    assert.ok(r.done && r.t < 75, `${where}: ended after ${r.t.toFixed(1)} s`);
+    assert.ok(r.done && r.t > 70 && r.t < 100, `${where}: ended after ${r.t.toFixed(1)} s`);
     for (const type of ['bee-item', 'bee-item-collect', 'bee-reinforce', 'topple', 'rain-start', 'wilt', 'deliver', 'wasp-climb', 'wasp-alarm', 'swarm-gathered', 'wasp-hit'])
       assert.ok(r.seen.has(type), `${where}: ${type}`);
     for (const type of ['turbo', 'boost', 'collect', 'deliver']) assert.ok(r.mine.has(type), `${where}: the player's bee showed ${type}`);
@@ -33,7 +33,7 @@ test('the demo shows every kind of event within about a minute, in a random orde
   assert.ok(runs.some(r => r.plan.missions.includes('cross')) && runs.some(r => r.plan.missions.includes('heist')), 'both bumblebee visits');
   assert.ok(runs.some(r => r.plan.ending === 'victory') && runs.some(r => r.plan.ending === 'wasted'), 'both endings');
   assert.ok(runs.some(r => r.plan.defenders) && runs.some(r => r.plan.ending === 'victory' && !r.plan.defenders), 'with and without defenders');
-  assert.ok(DEMO.cap > 75, 'a hard stop stays behind the normal end');
+  assert.ok(DEMO.cap > 100, 'a hard stop stays behind the normal end');
 });
 
 test('in the game: the demo button plays it with a badge, then returns to the landing screen without touching scores', async () => {
@@ -52,12 +52,12 @@ test('in the game: the demo button plays it with a badge, then returns to the la
     assert.equal($('demo-badge').hidden, false, 'the demo badge shows');
     assert.equal($('intro').hidden, true);
     const labels = new Set(); let t = 0, wasp = false, ended = -1;
-    for (let i = 0; i < 1100 && ended < 0; i++) {
+    for (let i = 0; i < 1400 && ended < 0; i++) {
       t += 0.1; hive.update(0.1, t);
       labels.add($('demo-label').textContent); wasp ||= !!game.wasp;
       if (!$('intro').hidden) ended = t;
     }
-    assert.ok(ended > 40 && ended < 95, `the demo ended by itself after ${ended.toFixed(0)} s`);
+    assert.ok(ended > 75 && ended < 115, `the demo ended by itself after ${ended.toFixed(0)} s`);
     assert.ok(wasp, 'the wasp came'); assert.ok(labels.size >= 5, `the badge named what happened (${[...labels].join(', ')})`);
     assert.equal($('demo-badge').hidden, true); assert.equal($('flight-hud').hidden, true); assert.equal($('tour-caption').hidden, false);
     assert.ok([...game.players.values()].every(p => p.bot), 'the demo bee is gone');

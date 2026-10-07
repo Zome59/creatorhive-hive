@@ -253,11 +253,11 @@
 .garden-ui .letterbox i { position: absolute; left: 0; right: 0; height: 11%; background: #050604; animation: garden-bars .45s ease-out both; }
 .garden-ui .letterbox i:first-child { top: 0; }
 .garden-ui .letterbox i:nth-child(2) { bottom: 0; }
-.garden-ui .letterbox strong { position: absolute; left: 50%; bottom: 13%; transform: translateX(-50%) rotate(-2deg); padding: 8px 18px; background: #ffd23f; color: #241800; font: 900 22px/1 Impact, "Arial Black", "Comic Sans MS", sans-serif; letter-spacing: .6px; text-transform: uppercase; box-shadow: 4px 4px 0 #17140f; white-space: nowrap; animation: garden-tip .5s .3s cubic-bezier(.2, 1.5, .4, 1) both; }
+.garden-ui .letterbox strong { position: absolute; left: 50%; top: 13%; transform: translateX(-50%) rotate(-2deg); padding: 8px 18px; background: #ffd23f; color: #241800; font: 900 22px/1 Impact, "Arial Black", "Comic Sans MS", sans-serif; letter-spacing: .6px; text-transform: uppercase; box-shadow: 4px 4px 0 #17140f; white-space: nowrap; animation: garden-tip .5s .3s cubic-bezier(.2, 1.5, .4, 1) both; }
 .garden-ui .letterbox small { position: absolute; right: 18px; bottom: 3.5%; color: #ffffff88; font-size: 9px; letter-spacing: .6px; }
 @keyframes garden-bars { from { height: 0; } }
 .garden-ui .arena-top, .garden-ui .flight-hud, .garden-ui .controls-panel, .garden-ui .mobile-controls, .garden-ui .bumble-marker { transition: opacity .3s; }
-.garden-ui.cinematic .arena-top, .garden-ui.cinematic .flight-hud, .garden-ui.cinematic .controls-panel, .garden-ui.cinematic .mobile-controls, .garden-ui.cinematic .bumble-marker, .garden-ui.cinematic .reticle, .garden-ui.cinematic .bumble-alert { opacity: 0; pointer-events: none; }
+.garden-ui.cinematic .arena-top, .garden-ui.cinematic .flight-hud, .garden-ui.cinematic .controls-panel, .garden-ui.cinematic .mobile-controls, .garden-ui.cinematic .bumble-marker, .garden-ui.cinematic .reticle, .garden-ui.cinematic .bumble-alert, .garden-ui.cinematic .load-tip, .garden-ui.cinematic .power-tip { opacity: 0; pointer-events: none; }
 @media (max-width: 480px) {
 .garden-ui .letterbox strong { font-size: 15px; }
 
@@ -396,15 +396,16 @@
 .garden-ui .demo-button span { color: var(--muted); font-size: 12px; }
 .garden-ui .demo-button:hover, .garden-ui .demo-button:focus-visible { background: var(--green); color: #10140c; }
 .garden-ui .demo-button:hover span, .garden-ui .demo-button:focus-visible span { color: #10140c; }
-.garden-ui .demo-badge { position: absolute; z-index: 1250; top: 76px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 7px 8px 7px 14px; border: 1px solid #ffd84a; border-radius: 3px; background: #1b1606e6; color: #fff6d8; font-size: 13px; white-space: nowrap; }
+.garden-ui .demo-badge { position: absolute; z-index: 1250; top: 72px; left: 20px; display: flex; align-items: center; gap: 12px; padding: 7px 8px 7px 14px; border: 1px solid #ffd84a; border-radius: 3px; background: #1b1606e6; color: #fff6d8; font-size: 13px; white-space: nowrap; }
 .garden-ui .demo-badge strong { color: #ffd84a; letter-spacing: 2px; }
 .garden-ui .demo-badge #demo-time { font-variant-numeric: tabular-nums; color: #ffeaa0; }
 .garden-ui .demo-badge button { padding: 4px 8px; border: 1px solid #ffd84a88; border-radius: 3px; background: transparent; color: #fff6d8; font-size: 12px; cursor: pointer; }
 .garden-ui .demo-badge button:hover { border-color: #ffd84a; }
 .garden-ui .demo-badge kbd { margin-left: 4px; font-size: 10px; opacity: .8; }
+.garden-ui.demo .controls-panel { display: none; }
 .garden-ui.demo .mobile-controls, .garden-ui.demo .swarm-prompt, .garden-ui.demo .swarm-attack, .garden-ui.demo .defender-call { pointer-events: none; }
 @media (max-width: 760px) {
-.garden-ui .demo-badge { top: 64px; gap: 8px; font-size: 12px; }
+.garden-ui .demo-badge { top: 64px; left: 12px; gap: 8px; font-size: 12px; }
 .garden-ui .demo-badge #demo-label { display: none; }
 
 }
