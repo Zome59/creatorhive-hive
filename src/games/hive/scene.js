@@ -2,10 +2,14 @@ import * as THREE from 'three';
 import { Game, RULES, BOOST, TURBO, WILT, HEIST, POWER, SHOVE, LOAD, RAIN, loadFactor } from './simulation.js';
 import { createRainCloud, createBoostRings } from './features/weather.js';
 import { readingTime } from './features/reading.js';
+import { createWaspBoss } from './features/wasp-boss.js';
+import { createBeeToken } from './features/bee-token.js';
+import { waspHead, WASP } from './features/wasp.js';
+import { basketFills, POLLEN } from './features/pollen.js';
 import { createStream, streamDistance, STREAM, STREAM_INFO, STREAM_Y } from './features/stream.js';
 import { createPowerAura } from './features/power-aura.js';
 import { createShellFur } from './features/shell-fur.js';
-import { createHoneyGauge } from './features/honey-gauge.js';
+import { createHoneyGauge, GAUGE } from './features/honey-gauge.js';
 import { releaseBumblebee } from './features/bumblebee.js';
 import { WORLD, FLOWERS, TREES, BUSHES } from './world.js';
 import { markup } from './ui.js';
@@ -25,10 +29,11 @@ import { createReactions } from './features/speech/reactions.js';
 
 const ORBIT_FOV = 38;
 
-export function createHive({ renderer, container, notify: toast, openDialog: showModal, closeDialog = () => {}, toggleFullscreen = async () => {} }) {
+// `game` lets tests hand in their own simulation; the game itself always creates a fresh one.
+export function createHive({ renderer, container, notify: toast, openDialog: showModal, closeDialog = () => {}, toggleFullscreen = async () => {}, game: injected = null }) {
   const root = document.createElement('div'); root.id = 'garden-ui'; root.className = 'garden-ui'; root.innerHTML = markup;
   const $ = id => root.querySelector(`#${id}`);
-  const game = new Game();
+  const game = injected ?? new Game();
   let player = null, started = false, paused = false, active = false, view = 'orbit', soundOn = true, width = 1, height = 1;
   const keys = new Set();
   const modal = { get open() { return !!document.querySelector('dialog[open]'); }, close: closeDialog };
@@ -98,6 +103,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bee ? row('Strafe / turn', `${k('KeyA', 'A')}${k('KeyD', 'D')}${k('ArrowLeft', '←')}${k('ArrowRight', '→')}`) : '',
       row('Boost', k('ShiftLeft', 'SHIFT')),
       row('💨 Speed mode', `<small>double-tap direction</small>${k('KeyE', 'E')}`),
+      row('🐝 Call 5 bees', `<small>with a bee token</small>${k('KeyB', 'B')}`),
+      row('🐝 Swarm (wasp)', `<small>tap 3×</small>${k('KeyX', 'X')}`),
       row('⚡ Power boost', `<small>when glowing</small>${k('ShiftLeft', 'SHIFT')}`),
       row('🐝 Shove bumblebee', '<small>power boost · 2 🍯</small>'),
       bee ? row('Look', '<small>click + mouse, or drag</small>') : row('Rotate / zoom', '<small>drag · scroll</small>'),
@@ -175,6 +182,10 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     $('rain-bumps').nextElementSibling.textContent = $('rain-bumps').value; $('rain-window').nextElementSibling.textContent = `${$('rain-window').value} s`;
   };
   $('rain-bumps').oninput = rainSetting; $('rain-window').oninput = rainSetting;
+  $('boss-mode').onchange = () => {
+    const on = $('boss-mode').checked; $('boss-mode-note').textContent = on ? '4:00 · 450' : '3:30 · 400';
+    if (!started) applyBoss(on); else { pendingBoss = on; toast(on ? 'From the next round: the wasp is back, 4-minute rounds for 450 nectar.' : 'From the next round: no wasp, 3½-minute rounds for 400 nectar.'); }
+  };
   $('mixer-reset').onclick = () => {
     audio.resetLevels();
     for (const slider of root.querySelectorAll('[data-bus]')) { slider.value = 100; showLevel(slider); }
@@ -193,6 +204,10 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     if (!started) return;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyP' && !e.repeat) togglePause();
+    if (e.code === 'KeyX' && !e.repeat && !paused) swarmTap();
+    if (e.code === 'KeyB' && !e.repeat && !paused) callBees();
+    if (e.code === 'Space' && !e.repeat && !paused && player && game.slamReady(player)) slamTap = true;
+    if (e.code === 'Enter' && !e.repeat && game.wasp?.swarm === 'formation') swarmAttack();
     if (e.code === 'KeyV' && !e.repeat && !paused) setView(view === 'bee' ? 'orbit' : 'bee');
     keys.add(e.code); syncHeld();
     // Double-tapping the key you fly with starts the speed mode (in bee view the turn arrows don't count).
@@ -220,7 +235,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   const look = bindBeeLook(renderer.domElement, beeView, () => active && !paused && !modal.open && view === 'bee');
   const orbitTarget = new THREE.Vector3();
   orbit.apply(camera, orbitTarget);
-  scene.add(new THREE.HemisphereLight('#fff4df', '#4b6151', 2.4));
+  const hemi = new THREE.HemisphereLight('#fff4df', '#4b6151', 2.4); scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff0c5', 3.2); sun.position.set(-18, 40, 20); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -36, right: 36, top: 36, bottom: -36, far: 100 }); sun.shadow.bias = -0.0008; scene.add(sun);
   const materials = new Map();
@@ -256,7 +271,21 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   for (let i = 0; i < 1700; i++) { const a = random() * Math.PI * 2, r = 4.2 + Math.sqrt(random()) * 26; dummy.position.set(Math.cos(a) * r, 0.27, Math.sin(a) * r); dummy.rotation.set(random() * 0.2, a, random() * 0.3); dummy.scale.setScalar(0.7 + random()); if (streamDistance(dummy.position.x, dummy.position.z) < 0.15) dummy.scale.setScalar(0); dummy.updateMatrix(); grass.setMatrixAt(i, dummy.matrix); grass.setColorAt(i, new THREE.Color(palette.foliage[i % palette.foliage.length])); }
   scene.add(grass);
   const hive = createHiveModel(); scene.add(hive.group);
-  const gauge = createHoneyGauge(); scene.add(gauge.group);
+  let gauge = createHoneyGauge({ cells: game.goal / GAUGE.unit }); scene.add(gauge.group);
+  // The boss wasp, and what it can do to the hive: wreck 0..1 squashes the hive, spills honey, and on a lost round
+  // the light goes down and WASTED fades in.
+  const boss = createWaspBoss(scene, { inView: at => inView(at, 3), onExit: at => { burst.emit(at, { color: '#ffe066', count: 40, speed: 3.6, gravity: -1.2, size: 0.16, life: 1.2 }); burst.emit(at, { color: '#2b2620', count: 16, speed: 2.4, gravity: -2, size: 0.12, life: 1 }); } });
+  const bossLook = new THREE.Vector3();
+  const beeToken = createBeeToken(); scene.add(beeToken.group);
+  let victoryT = 0, wreck = 0, wreckTarget = 0, wastedT = -1, swarmTaps = [], slamTap = false, waspSaid = new Set();
+  // Final boss on/off (Game settings): 4:00 rounds for 450 nectar with the wasp, 3:30 for 400 without.
+  let pendingBoss = null;
+  function applyBoss(on) {
+    game.setBoss(on); game.restartClock();
+    scene.remove(gauge.group); gauge = createHoneyGauge({ cells: game.goal / GAUGE.unit }); scene.add(gauge.group);
+    $('goal-total').textContent = `/ ${game.goal}`;
+    $('intro-text').innerHTML = `${game.goal} nectar. ${game.duration % 60 ? `${Math.floor(game.duration / 60)}½` : game.duration / 60} minutes. You + 6 AI scouts. Fly high and low, dodge the clumsy bumblebee${on ? ', and <b>beware the wasp!</b>' : '.'}`;
+  }
   // Goal celebration: the hive swells, honey floods out to a third of the island, and trees turn gold.
   const flood = new THREE.Mesh((() => {
     const g = new THREE.CircleGeometry(1, 96), pos = g.attributes.position;
@@ -269,8 +298,9 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   function celebrate(dt, elapsed) {
     const t = game.celebration?.t ?? -1, party = t >= 0;
     const swell = party ? 1 + 0.35 * ease(t / 2) : 1;
-    hive.group.scale.setScalar(swell); gauge.group.scale.setScalar(swell);
-    flood.visible = party;
+    hive.group.scale.set(swell * (1 + 0.3 * wreck), swell * (1 - 0.72 * wreck), swell * (1 + 0.3 * wreck)); gauge.group.scale.setScalar(swell);
+    flood.visible = party || wreck > 0.02;
+    if (!party && wreck > 0.02) { const r = 2.5 + 5 * wreck; flood.scale.set(r, r, 1); }
     if (party) { const r = 3 + (WORLD.radius / 3 - 3) * ease(t / 9); flood.scale.set(r, r, 1); flood.rotation.z = elapsed * 0.02; }
     const gold = party ? ease(t / 6) : 0;
     for (const canopy of canopies) {
@@ -354,9 +384,13 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     for (const z of [-0.2, 0.12]) { const band = mesh(cylinder(0.305, 0.305, 0.13, 16), '#34352d', body, 0, 0, z); band.rotation.x = Math.PI / 2; }
     orb(body, '#34352d', 0, 0.04, 0.44, 0.29, 0.27, 0.23);
     for (const x of [-0.13, 0.13]) { orb(body, '#fff7d7', x, 0.13, 0.61, 0.07); orb(body, '#282f29', x, 0.13, 0.66, 0.035); const antenna = mesh(cylinder(0.015, 0.02, 0.24, 5), '#34352d', body, x, 0.36, 0.47); antenna.rotation.z = x * -3; }
-    // Six thin legs; the hind legs carry pollen baskets that grow with the nectar load.
+    // Six thin legs, each with a pollen basket that fills with the nectar load (hind pair first, then middle, then front).
     for (const z of [0.2, 0.02, -0.16]) for (const side of [-1, 1]) { const leg = mesh(cylinder(0.02, 0.012, 0.3, 5), '#2f2d27', body, side * 0.17, -0.28, z); leg.rotation.set(z * 0.9, 0, side * 0.45); }
-    const baskets = [-1, 1].map(side => { const basket = orb(body, '#f0a31c', side * 0.25, -0.41, -0.2, 1, 1.15, 1.3, { roughness: 0.32, emissive: '#7a4a00', emissiveIntensity: 0.3 }); basket.scale.setScalar(0.001); basket.visible = false; return basket; });
+    const baskets = [[-0.2, 0], [0.0, 1], [0.19, 2]].flatMap(([z, pair]) => [-1, 1].map(side => { const basket = orb(body, '#f0a31c', side * 0.25, -0.41, z, 1, 1.15, 1.3, { roughness: 0.32, emissive: '#7a4a00', emissiveIntensity: 0.3 }); basket.scale.setScalar(0.001); basket.visible = false; basket.userData.pair = pair; return basket; }));
+    if (p.defender) { // a red sash across the body and a gold star: a defender of the hive
+      const sash = mesh(new THREE.TorusGeometry(0.315, 0.04, 8, 36), '#c8102e', body, 0, 0.02, 0.06, { roughness: 0.55 }); sash.rotation.set(0.15, 0.9, 0.5);
+      const star = mesh(new THREE.OctahedronGeometry(0.06, 0), '#ffd84a', body, 0.2, 0.22, 0.1, { roughness: 0.3, metalness: 0.4, emissive: '#6b4a00' }); star.scale.set(1, 1, 0.5);
+    }
     const fuzz = createShellFur(fuzzSphere, { layers: 8, length: 0.13, density: [70, 46], color: p.bot ? palette.bees[p.id % palette.bees.length] : '#ffd052', stripes: BANDS, rootShade: 0.62, droop: 0.12 });
     fuzz.scale.set(0.32, 0.3, 0.52); body.add(fuzz);
     const wings = [];
@@ -377,11 +411,16 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     beeModels.set(p.id, { group, body, wings, shadow, stem, stars, aura, fuzz, baskets, load: 0, labelTexture, label, tumble: 0 });
   }
   const bumble = createBumblebee(); bumble.group.visible = false; scene.add(bumble.group);
+  const BUMBLE_EXIT = 1.1, bumbleDrift = new THREE.Vector3(), bumbleLast = new THREE.Vector3(); let bumbleExit = 0;
+  // Is a point (with some radius) inside the camera's view? Exit effects only play where someone can see them.
+  const viewFrustum = new THREE.Frustum(), viewMatrix = new THREE.Matrix4(), viewSphere = new THREE.Sphere();
+  function inView(at, radius = 1) { camera.updateMatrixWorld(); viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); viewFrustum.setFromProjectionMatrix(viewMatrix); return viewFrustum.intersectsSphere(viewSphere.set(at, radius)); }
   const bumbleShadow = mesh(new THREE.CircleGeometry(1.1, 28), '#2a2a20', scene, 0, 0.08, 0, { transparent: true, opacity: 0.3 }); bumbleShadow.rotation.x = -Math.PI / 2; bumbleShadow.castShadow = false; bumbleShadow.visible = false;
 
   const head = new THREE.Vector3(), probe = new THREE.Vector3(), hiveTop = new THREE.Vector3(0, 5.4, 0), axis = new THREE.Vector3();
   function locate(id) {
     if (id === 'bumble') return bumble.group.visible ? head.copy(bumble.group.position).add(probe.set(0, 1.9, 0)) : null;
+    if (id === 'wasp') { if (!game.wasp) return null; const h = waspHead(game.wasp); return head.set(h.x, h.y + 1.6, h.z); }
     if (view === 'bee' && player && id === player.id) return null;
     const bee = beeModels.get(id); return bee ? head.copy(bee.group.position).add(probe.set(0, 0.72, 0)) : null;
   }
@@ -451,7 +490,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     highscores.push(entry); highscores.sort((a, b) => b.points - a.points); highscores.splice(10);
     const rank = highscores.indexOf(entry) + 1;
     showModal(`<p class="eyebrow">ROUND ${game.round} · HIGHSCORE</p><h2>${goal ? '🍯 Goal reached! The hive overflows.' : '⏱ Time\u2019s up.'}</h2>
-      <p>Hive: <strong>${game.honey} / ${RULES.goal} nectar</strong> · you brought <strong>${player.score}</strong><br>Your score: <strong>${player.points.toLocaleString('en')} points</strong>${rank === 1 && highscores.length > 1 ? ' · <strong>🏆 NEW HIGHSCORE!</strong>' : ''}</p>
+      <p>Hive: <strong>${game.honey} / ${game.goal} nectar</strong> · you brought <strong>${player.score}</strong><br>Your score: <strong>${player.points.toLocaleString('en')} points</strong>${rank === 1 && highscores.length > 1 ? ' · <strong>🏆 NEW HIGHSCORE!</strong>' : ''}</p>
       ${rank ? `<form class="score-entry" id="hive-score-form"><label for="hive-initials">Your initials</label><input id="hive-initials" maxlength="3" autocomplete="off" spellcheck="false" value="${initials}"><button class="primary" type="submit">Save</button></form>` : ''}
       <ol class="score-table" id="hive-score-table">${scoreRows()}</ol>
       <p class="result-note">Next round in <span id="hive-next">${Math.ceil(game.remaining)}</span> s. Scores last for this page session only.</p>`);
@@ -462,12 +501,119 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     input.oninput = apply; input.focus(); input.select();
     form.onsubmit = e => { e.preventDefault(); apply(); input.blur(); form.classList.add('saved'); form.querySelector('button').textContent = '✓ Saved'; };
   }
+  // ---- boss fight glue: swarm commands, prompts, and the WASTED ending
+  function swarmTap() {
+    const w = game.wasp; if (!w || !started) return;
+    const now = performance.now(); swarmTaps = swarmTaps.filter(t => now - t < 1200); swarmTaps.push(now);
+    if (swarmTaps.length < 3) return;
+    swarmTaps = [];
+    const command = w.swarm === 'none' ? 'gather' : w.swarm === 'gathered' ? 'formation' : null;
+    if (command) game.waspCommand(command);
+  }
+  // Bee tokens: B (or the buttons) calls five bees out of the hive; during the wasp fight they come as defenders.
+  function callBees() { if (started && player && game.redeemBeeItem()) $('defender-call').hidden = true; }
+  $('defender-call').onclick = callBees;
+  $('touch-bees').addEventListener('pointerdown', event => { event.preventDefault(); callBees(); });
+  function swarmAttack() { if (game.waspCommand('attack')) $('swarm-attack').hidden = true; }
+  $('swarm-attack').onclick = swarmAttack;
+  $('touch-swarm').addEventListener('pointerdown', event => { event.preventDefault(); swarmTap(); });
+  for (const button of root.querySelectorAll('[data-key="Space"]')) button.addEventListener('pointerdown', () => { if (player && game.slamReady(player)) slamTap = true; });
+  const FIGHT = ['hunt', 'approach', 'mobbed', 'shake', 'advance'];
+  function updateBossUI() {
+    const w = started ? game.wasp : null, fight = !!w && FIGHT.includes(w.phase);
+    $('boss-bar').hidden = !w || w.phase === 'climb' || w.phase === 'flip';
+    if (w) {
+      $('boss-hits').innerHTML = Array.from({ length: 5 }, (_, i) => `<i class="${i < w.hits ? 'hit' : ''}"></i>`).join('');
+      const swarm = [...game.players.values()].filter(p => p.bot && p.swarmSlot >= 0 && !p.ko).length, down = [...game.players.values()].filter(p => p.ko).length;
+      $('boss-swarm').textContent = w.hits >= 5 ? 'DEFEATED' : `swarm ${swarm} · down ${down}`;
+    }
+    const asking = fight && (w.swarm === 'none' || w.swarm === 'gathered');
+    $('swarm-prompt').hidden = !asking;
+    if (asking) {
+      $('swarm-text').textContent = w.swarm === 'none' ? 'Tap X three times fast: gather the swarm!' : 'Again, X X X: attack formation!';
+      const now = performance.now(), n = swarmTaps.filter(t => now - t < 1200).length;
+      $('swarm-taps').innerHTML = [0, 1, 2].map(i => `<b class="${i < n ? 'on' : ''}"></b>`).join('');
+    }
+    $('swarm-attack').hidden = !(fight && w.swarm === 'formation');
+    $('slam-prompt').hidden = !(fight && player && game.slamReady(player));
+    const tokens = started && player ? player.beeItems ?? 0 : 0;
+    $('bee-tokens').hidden = !tokens; $('bee-token-count').textContent = `×${tokens}`;
+    $('defender-call').hidden = !(fight && tokens > 0); $('defender-count').textContent = tokens;
+    if (w) $('phase').textContent = 'BOSS FIGHT';
+  }
+  function resetBoss() {
+    wreck = wreckTarget = 0; wastedT = -1; victoryT = 0; $('victory').hidden = true; $('wasted').hidden = true; renderer.domElement.style.filter = ''; hemi.intensity = 2.4; sun.intensity = 3.2; boss.reset();
+    hive.group.rotation.set(0, 0, 0); waspSaid.clear();
+  }
+  const say = (id, lines, options) => bubbles.say(id, lines[Math.floor(Math.random() * lines.length)], options);
+  function bossEvent(event) {
+    const t = event.type;
+    if (t === 'wasp-climb') { root.classList.add('cinematic'); $('letterbox').hidden = false; $('cine-title').textContent = '⚠ Something is climbing up the island…'; release(); }
+    if (t === 'wasp-alarm') {
+      root.classList.remove('cinematic'); $('letterbox').hidden = true;
+      $('alert-text').textContent = 'WASP ATTACK'; $('bumble-alert').hidden = false; alertTime = 3.5;
+      toast('🐝🐝🐝 Tap X three times fast to gather the remaining scouts into a swarm!');
+      say('wasp', ['BZZZT! Lunch time!', 'Nice little hive you have…', 'Who wants to go first?'], { style: 'bumble', delay: 0.4 });
+    }
+    if (t === 'wasp-catch') { say(event.id, ['Help!', 'Let go of me!', 'Mmmph!', 'Not the wings!'], { style: 'shout' }); bubbles.pow(event, 'CHOMP!', 'bumble'); }
+    if (t === 'wasp-ko') { bubbles.say(event.id, 'Ugh…'); burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffe066', count: 14, speed: 2, gravity: -5 }); }
+    if (t === 'swarm-gathered') { toast('Swarm ready! Now X X X again for the attack formation.'); for (const p of game.players.values()) if (p.bot && p.swarmSlot >= 0 && Math.random() < 0.4) say(p.id, ['We\u2019re with you!', 'Together!', 'Buzz squad!'], { delay: Math.random() }); }
+    if (t === 'swarm-formation') toast('Attack formation! Hit ⚔ ATTACK (or Enter) to charge.');
+    if (t === 'swarm-charging') for (const p of game.players.values()) if (p.bot && p.swarmSlot >= 0 && Math.random() < 0.5) say(p.id, ['Chaaarge!', 'For the queen!', 'Get it!'], { style: 'shout', delay: Math.random() * 0.4 });
+    if (t === 'wasp-mobbed') { bubbles.pow(event, 'POKE! POKE!', 'bump'); if (!waspSaid.has('slam')) { waspSaid.add('slam'); toast('It\u2019s dazed! Fly above its head and press SPACE for a butt slam.'); } }
+    if (t === 'wasp-shake') { bubbles.pow(event, 'SHAKE!', 'bumble'); say('wasp', ['GET OFF ME!', 'Pests!', 'ENOUGH!'], { style: 'bumble' }); }
+    if (t === 'wasp-hit') {
+      boss.hit(); bubbles.pow(event, ['BONK!', 'WHAM!', 'BOOF!', 'SPLAT!', 'KAPOW!'][Math.min(4, event.hits - 1)], 'bumble');
+      burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffe066', count: 30, speed: 4.5, gravity: -4 }); beeView.bump(0.8);
+      if (event.hits === 1) toast('Slam! Four more: climb up and do it again. The bar shows your hits.'); // later hits show in the boss bar (queued toasts would lag behind)
+    }
+    if (t === 'wasp-swat' && !waspSaid.has('swat')) { waspSaid.add('swat'); toast('Ouch! Don\u2019t fly into it: slam its head from above.'); }
+    if (t === 'wasp-bonus') { toast(`🏆 You beat the wasp! +${event.points} points`); for (const p of game.players.values()) if (p.bot && Math.random() < 0.5) say(p.id, ['Hooray!', 'Bye-bye, wasp!', 'Best bee ever!'], { delay: 0.5 + Math.random() }); }
+    if (t === 'wasp-fall') { bubbles.pow(event, 'K.O.!', 'bumble'); say('wasp', ['Ooof…', 'My head…'], { style: 'bumble', delay: 0.8 }); }
+    if (t === 'wasp-flee') { // the farewell: banner, confetti, cheering
+      victoryT = 4.2; $('victory').hidden = false; $('victory-text').textContent = `The wasp reels off into the sky. +${WASP.bonus} points!`;
+      const at = beeModels.get(player?.id)?.group.position;
+      if (at) for (const [color, delay] of [['#ffd21a', 0], ['#ff7a1a', 0.25], ['#fff3c4', 0.5], ['#7fd36a', 0.75]]) setTimeout(() => burst.emit(probe.set(at.x, at.y + 1, at.z), { color, count: 34, speed: 5, gravity: -5, size: 0.13, life: 1.4 }), delay * 1000);
+      for (const p of game.players.values()) if (p.bot && !p.ko) say(p.id, ['Hooray!', 'And stay out!', 'Bye-bye, wasp!', 'We did it!'], { delay: 0.3 + Math.random() * 1.2 });
+    }
+    if (t === 'wasp-gone') toast('The wasp flew off. Back to the honey!');
+    if (t === 'wasp-kick') toast('Oh no! The wasp is smashing the hive!');
+    if (t === 'hive-collapse') {
+      wreckTarget = 1; bubbles.pow({ x: 0, y: 4, z: 0 }, 'CRUNCH!', 'bumble');
+      for (let i = 0; i < 4; i++) burst.emit(probe.set(Math.sin(i * 1.6) * 1.5, 2 + i * 0.5, Math.cos(i * 1.6) * 1.5), { color: '#f2a516', count: 40, speed: 6, gravity: -9, size: 0.2, life: 1.4 });
+    }
+    if (t === 'wasp-wasted') wastedT = 0;
+    if (t === 'bee-item') toast('🐝 A bee token appeared! Grab it for five extra bees.');
+    if (t === 'bee-item-collect') { burst.emit(probe.set(event.x, event.y, event.z), { color: '#ffd84a', count: 26, speed: 3, gravity: -3 }); toast(game.wasp ? '🐝 Bee token! Press B to call 5 defender bees.' : '🐝 Bee token! Press B for 5 new bees now, or save it for the wasp.'); }
+    if (t === 'bee-item-gone') toast('The bee token faded away.');
+    if (t === 'bee-reinforce') {
+      toast(event.defenders ? '🛡 Five defender bees join the fight!' : '🐝 Five new bees crawl out of the hive!');
+      event.ids.forEach((id, i) => { if (i % 2 === 0) say(id, event.defenders ? ['For the hive!', 'Defenders, go!', 'Stand back, wasp!'] : ['Reporting for duty!', 'Fresh wings!', 'Where\u2019s the nectar?'], { delay: 1 + i * 0.3 }); });
+    }
+  }
+  function bossFrame(dt, elapsed) {
+    boss.update(paused ? 0 : dt, elapsed, game, player, !!(player && game.slamReady(player)));
+    beeToken.update(paused ? 0 : dt, elapsed, started ? game.beeItem : null);
+    // Reinforcements leave with the round: drop their models.
+    for (const [id, bee] of beeModels) if (!game.players.has(id)) { scene.remove(bee.group); scene.remove(bee.shadow); if (bee.stem) scene.remove(bee.stem); bee.labelTexture?.dispose(); beeModels.delete(id); }
+    wreck += (wreckTarget - wreck) * Math.min(1, dt * 3);
+    const w = game.wasp;
+    if (w?.phase === 'kick') { const k = Math.sin(elapsed * 14); hive.group.rotation.z = k * 0.04 * (0.5 + w.t / 4.6); hive.group.rotation.x = Math.cos(elapsed * 11) * 0.03; }
+    else if (!w) hive.group.rotation.z *= 0.9;
+    if (victoryT > 0) { victoryT = Math.max(0, victoryT - dt); if (!victoryT) $('victory').hidden = true; }
+    if (wastedT >= 0) { // the light goes down, colour drains, WASTED fades in
+      wastedT += dt; const k = Math.min(1, wastedT / 2.2);
+      hemi.intensity = 2.4 * (1 - 0.75 * k); sun.intensity = 3.2 * (1 - 0.8 * k);
+      renderer.domElement.style.filter = `grayscale(${(k * 0.85).toFixed(2)}) brightness(${(1 - 0.25 * k).toFixed(2)})`;
+      if (wastedT > 1.1) $('wasted').hidden = false;
+    }
+  }
   function updateUI() {
     const seconds = Math.max(0, Math.ceil(game.remaining)); $('timer').textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
     $('round').textContent = String(game.round).padStart(2, '0'); $('honey').textContent = game.honey;
-    const percent = Math.min(100, Math.floor(game.honey / RULES.goal * 100)); $('honey-progress').style.width = `${percent}%`; $('percent').textContent = `${percent}%`;
+    const percent = Math.min(100, Math.floor(game.honey / game.goal * 100)); $('honey-progress').style.width = `${percent}%`; $('percent').textContent = `${percent}%`;
     // Your share of the hive's honey, shown in your colour on the same bar.
-    const mine = started ? gauge.player : 0; $('player-progress').style.width = `${Math.min(100, mine / RULES.goal * 100)}%`; $('your-share').textContent = started ? `YOU ${mine}` : '';
+    const mine = started ? gauge.player : 0; $('player-progress').style.width = `${Math.min(100, mine / game.goal * 100)}%`; $('your-share').textContent = started ? `YOU ${mine}` : '';
     if (player) {
       $('bag').innerHTML = Array.from({ length: RULES.capacity }, (_, i) => `<i class="${i < player.bag ? 'filled' : ''}"></i>`).join('') + `<strong>${player.bag}<span> / 8</span></strong>`;
       const recharge = BOOST.cooldown - BOOST.duration;
@@ -487,10 +633,12 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     }
     if (started && game.result && game.result !== lastResult) { $('phase').textContent = 'RESETTING'; scoresDue = true; }
     // After a win the party plays for a few seconds before the highscore table covers it.
-    if (scoresDue && game.result && RULES.break - game.remaining >= (game.result === 'complete' ? 6 : 0.4)) { scoresDue = false; showScores(); }
-    if (game.round !== lastRound) { modal.close(); $('phase').textContent = 'ACTIVE'; toast(game.best ? `New round. Best this session: ${game.best.toLocaleString('en')} points.` : 'New round.'); lastScore = 0; lastBag = 0; }
+    if (scoresDue && game.result && RULES.break - game.remaining >= (game.result === 'complete' ? 6 : game.result === 'wasted' ? 5.5 : 0.4)) { scoresDue = false; showScores(); }
+    if (game.round !== lastRound && pendingBoss !== null) { applyBoss(pendingBoss); pendingBoss = null; }
+    if (game.round !== lastRound) { resetBoss(); modal.close(); $('phase').textContent = 'ACTIVE'; toast(game.best ? `New round. Best this session: ${game.best.toLocaleString('en')} points.` : 'New round.'); lastScore = 0; lastBag = 0; }
     lastResult = game.result; lastRound = game.round;
-    $('alert-count').textContent = Math.ceil(game.bumbleWarn);
+    $('alert-count').textContent = game.wasp ? '!' : Math.ceil(game.bumbleWarn);
+    updateBossUI();
     const next = document.getElementById('hive-next'); if (next && game.result) next.textContent = Math.max(0, Math.ceil(game.remaining));
   }
   function handle(events, dt) {
@@ -519,8 +667,13 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (started && event.type === 'scout-mood') { const lines = event.mood === 'fast' ? ['Wheee!', 'Coming through!', 'Zoom zoom!'] : ['Yawn…', 'So sleepy…', 'Slow and steady…']; bubbles.say(event.id, lines[Math.floor(Math.random() * lines.length)]); }
       if (player && event.id === player.id && event.type === 'turbo' && started) { boostRings.trigger(false); skyFlash = 0.5; toast(`💨 Speed mode for ${TURBO.duration} seconds!`); }
       if (player && event.id === player.id && event.type === 'boost' && started) { boostRings.trigger(event.power); skyFlash = event.power ? 1 : 0.6; }
-      if (player && event.id === player.id && event.type === 'rain-start' && started) { toast(`☁ ${game.rainRule.bumps} bumps in ${game.rainRule.window} s! A rain cloud soaks you: slower for ${RAIN.wet} seconds.`); }
+      if (player && event.id === player.id && event.type === 'rain-start' && started) {
+        toast(`☁ ${game.rainRule.bumps} bumps in ${game.rainRule.window} s! A rain cloud soaks you: slower for ${RAIN.wet} seconds.`);
+        // The bee thinks out loud once the cloud has sailed in.
+        if (view !== 'bee') { const lines = ['Oh no, not again…', 'What a lousy day…', 'Why always me?', 'Great. Just great.', 'My poor wings…']; bubbles.say(player.id, lines[Math.floor(Math.random() * lines.length)], { style: 'think', delay: 1 }); }
+      }
       if (player && event.id === player.id && event.type === 'rain-end') { const at = beeModels.get(player.id)?.group.position; if (at) burst.emit(at, { color: '#9fd6ff', count: 26, speed: 3.2, gravity: -6, size: 0.08, life: 0.7 }); if (view !== 'bee') bubbles.say(player.id, 'Brrrrr!'); }
+      if (started) bossEvent(event);
       if (event.type === 'round-end') { alertTime = 0; $('bumble-alert').hidden = true; endCinematic(); }
       if (started && event.type === 'round-end' && event.result === 'complete') { toast('🍯 Goal reached! The hive overflows with honey!'); audio.play('deliver', null, { rate: 0.85 }); }
       if (started && event.type === 'heavy' && player && event.id === player.id) loadTip = readingTime($('load-tip').textContent);
@@ -544,6 +697,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
   function input(dt) {
     const held = (...codes) => codes.some(code => keys.has(code));
     const turbo = held('KeyE') || turboTap; turboTap = false;
+    const slam = slamTap; slamTap = false;
     const forward = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
     const vertical = Number(held('Space')) - Number(held('KeyC'));
     const dash = held('ShiftLeft', 'ShiftRight');
@@ -551,10 +705,10 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       const turn = Number(held('ArrowRight')) - Number(held('ArrowLeft'));
       beeView.turn(turn, dt);
       const right = Number(held('KeyD')) - Number(held('KeyA'));
-      return { ...beeView.movement(forward, right, vertical), dash, turbo, face: beeView.yaw, strafe: right };
+      return { ...beeView.movement(forward, right, vertical), dash, turbo, slam, face: beeView.yaw, strafe: right };
     }
     const right = Number(held('KeyD', 'ArrowRight')) - Number(held('KeyA', 'ArrowLeft'));
-    return { ...orbit.movement(forward, right), y: vertical, dash, turbo };
+    return { ...orbit.movement(forward, right), y: vertical, dash, turbo, slam };
   }
   // Start of play: zoom in on the player's bee and make it glow for a moment, then ease back out.
   const SPOTLIGHT = 3.5, spotEye = new THREE.Vector3(), spotAim = new THREE.Vector3();
@@ -600,7 +754,7 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (player) { const move = modal.open ? { x: 0, y: 0, z: 0 } : input(dt); strafe = move.strafe ?? 0; game.setInput(player.id, move); }
       game.tick(dt); ticked = true;
       // Keep the landing screen's world alive without using up its first round.
-      if (!started) { game.remaining = RULES.duration; if (game.result) game.reset(); }
+      if (!started) { game.remaining = game.duration; if (game.result) game.reset(); }
     }
     if (ticked) handle(game.events, dt);
     for (const p of game.players.values()) {
@@ -614,11 +768,14 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       bee.body.rotation.x = p.stun ? Math.cos(bee.tumble * 0.7) * 0.5 : Math.max(-0.35, Math.min(0.35, -p.vy * 0.06));
       // Pollen baskets swell with every drop and shrink away after delivering.
       bee.load += (p.bag / RULES.capacity - bee.load) * Math.min(1, dt * 8);
-      const basket = bee.load > 0.01 ? 0.05 + 0.09 * bee.load : 0;
-      bee.baskets.forEach(b => { b.visible = basket > 0; b.scale.set(basket, basket * 1.15, basket * 1.3); });
+      const fills = basketFills(bee.load);
+      bee.baskets.forEach(b => { const f = fills[b.userData.pair], s = f > 0.01 ? (POLLEN.base + POLLEN.grow * f) * (b.userData.pair === 2 ? POLLEN.front : 1) : 0; b.visible = s > 0; b.scale.set(s, s * 1.15, s * 1.3); });
       bee.wings.forEach((w, i) => { w.rotation.z = Math.sin(elapsed * (game.boosting(p) || p.turbo ? 95 : 75)) * 0.45 * (i ? 1 : -1); });
+      if (p.crawl > 0) { bee.body.rotation.x = 0.28; bee.body.rotation.z = Math.sin(elapsed * 16 + p.id) * 0.06; bee.wings.forEach((w, i) => { w.rotation.z = (i ? 1 : -1) * 0.08; }); } // crawling out of the door
       bee.shadow.position.set(p.x, 0.07, p.z); bee.shadow.material.opacity = 0.45 - Math.min(0.3, (p.y - WORLD.floor) * 0.035);
-      bee.stars.group.visible = p.stun > 0.2; if (p.stun) bee.stars.update(elapsed);
+      if (p.ko) { bee.body.rotation.z = Math.PI * 0.92; bee.body.rotation.x = 0.2; } // knocked out: on its back in the grass
+      if (p.caught) bee.body.rotation.z = Math.sin(elapsed * 30) * 0.5; // struggling in the mandibles
+      bee.stars.group.visible = p.stun > 0.2 || p.ko; if (p.stun || p.ko) bee.stars.update(elapsed);
       bee.aura?.update(dt, elapsed, { active: p.powered || (own && spotlight > 0.3), boosting: game.powerBoosting(p) });
       // Shaking itself dry after the rain: a fast, fading wiggle.
       if (p.shake) bee.body.rotation.z = Math.sin(elapsed * 55) * 0.55 * (p.shake / RAIN.shake);
@@ -629,8 +786,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       if (bee.stem) { bee.stem.visible = view === 'orbit' && started; bee.stem.position.copy(bee.group.position); bee.stem.scale.y = Math.max(0.01, bee.group.position.y - 0.1); }
     }
     const b = game.bumble;
-    bumble.group.visible = bumbleShadow.visible = !!b;
     if (b) {
+      bumbleExit = 0; bumble.group.visible = bumbleShadow.visible = true; bumble.group.scale.setScalar(1); bumbleShadow.material.opacity = 0.3;
       if (!bumble.seen) { bumble.group.position.set(b.x, b.y, b.z); bumble.group.rotation.y = b.yaw; bumble.seen = true; }
       // A bumped thief shakes on the hive; a dislodged one tumbles while it falls.
       const shake = b.wobble ? Math.sin(elapsed * 42) * 0.12 * b.wobble : 0;
@@ -641,7 +798,18 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
       const perched = b.phase === 'perched';
       bumble.update(dt, elapsed, { speed: b.speed, stunned: b.oops > 0 || b.wobble > 0.3, perched, sucking: perched, flailing: b.phase === 'falling' });
       bumbleShadow.position.set(b.x, 0.07, b.z);
-    } else bumble.seen = false;
+      bumbleDrift.copy(bumble.group.position).sub(bumbleLast).divideScalar(Math.max(dt, 1e-3)); bumbleLast.copy(bumble.group.position);
+    } else if (bumble.seen) { // it just left: if the camera sees it, fade out with a puff of pollen and sparkles
+      bumble.seen = false; bumbleExit = inView(bumble.group.position, 2) ? BUMBLE_EXIT : 0;
+      if (bumbleExit) { burst.emit(bumble.group.position, { color: '#ffe08a', count: 34, speed: 3.2, gravity: -1.2, size: 0.15, life: 1.1 }); burst.emit(bumble.group.position, { color: '#ffffff', count: 18, speed: 2.2, gravity: 0.6, size: 0.1, life: 0.9 }); }
+    }
+    if (!b && bumbleExit > 0) { // drifts on, shrinks, spins a little; the shadow fades with it
+      bumbleExit = Math.max(0, bumbleExit - dt); const k = bumbleExit / BUMBLE_EXIT;
+      bumble.group.position.addScaledVector(bumbleDrift, dt * k); bumble.group.position.y += dt * 1.4;
+      bumble.group.scale.setScalar(Math.max(0.001, k * k * (3 - 2 * k))); bumble.group.rotation.y += dt * 5 * (1 - k);
+      bumble.update(dt, elapsed, { speed: 5 }); bumbleShadow.material.opacity = 0.3 * k;
+      if (!bumbleExit) { bumble.group.visible = bumbleShadow.visible = false; bumble.group.scale.setScalar(1); bumbleShadow.material.opacity = 0.3; }
+    } else if (!b) bumble.group.visible = bumbleShadow.visible = false;
     bumble.fur.userData.setLayers(bumbleLayers(camera.position.distanceTo(bumble.group.position)));
     if (!started) tourFrame(dt, elapsed);
     flowerModels.forEach(({ flower, drop }, i) => { flower.update(elapsed); drop.update(dt, elapsed, !game.cooldowns[i]); wiltPose(flower.group, game.wilt[i]); });
@@ -655,11 +823,11 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
     }
     burst.update(dt);
     hiveBeacon = Math.max(0, hiveBeacon - dt); hive.update(elapsed, hiveBeacon);
-    gauge.sync(game.honey); gauge.update(dt, elapsed); celebrate(dt, elapsed);
+    gauge.sync(game.honey); gauge.update(dt, elapsed); celebrate(dt, elapsed); bossFrame(dt, elapsed);
     updateSky(paused ? 0 : dt); if (!paused) stream.update(dt, elapsed);
     const mine = player && beeModels.get(player.id);
     if (mine) {
-      rainCloud.group.position.copy(mine.group.position).add(probe.set(0, 2.1, 0)); // above the name tag and bubbles
+      rainCloud.group.position.copy(mine.group.position).add(probe.set(0, 3, 0)); // well above the bee, its badge and bubbles
       boostRings.update(paused ? 0 : dt, mine.group.position);
       if (player.wet && !paused) { dripTimer -= dt; if (dripTimer <= 0) { dripTimer = 0.25; burst.emit(mine.group.position, { color: '#9fd6ff', count: 2, speed: 0.4, gravity: -7, size: 0.05, life: 0.5 }); } }
     }
@@ -692,6 +860,8 @@ export function createHive({ renderer, container, notify: toast, openDialog: sho
         camera.position.lerp(spotEye, ease); camera.lookAt(probe.copy(orbitTarget).lerp(spotAim, ease));
       }
     }
+    // The boss fight's camera shots blend over the garden or bee view (and ease back out afterwards).
+    if ((started && game.wasp) || boss.directing) { camera.userData.baseFov = view === 'bee' ? beeView.fov : ORBIT_FOV; camera.getWorldDirection(bossLook); boss.camera(paused ? 0 : dt, camera, game, player, bossLook.multiplyScalar(12).add(camera.position)); }
     if (!started && audio.enabled && !paused) { // landing screen: hear the garden from the tour camera
       camera.getWorldDirection(probe);
       soundscape.frame(game, null, dt, { listener: { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: Math.atan2(probe.x, probe.z), pitch: Math.asin(Math.max(-1, Math.min(1, probe.y))) }, music, water: nearBrook(camera.position) });

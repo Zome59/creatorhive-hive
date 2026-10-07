@@ -1,14 +1,21 @@
 import { WORLD, FLOWERS, OBSTACLES, contact } from './world.js';
 import { BUMBLE, HEIST, SHOVE, heistActive, scheduleBumblebee, tickBumblebee } from './features/bumblebee.js';
+import { WASP, scheduleWasp, tickWasp, steerForWasp, waspActive, waspCommand, slamReady } from './features/wasp.js';
+import { BEE_ITEM, scheduleBeeItems, tickBeeItems, redeemBeeItem, steerCrawl } from './features/bee-items.js';
 
 export { FLOWERS };
-export const RULES = Object.freeze({ radius: WORLD.radius, capacity: 8, duration: 180, break: 18, goal: 350, regrow: 1.2 });
+// Two round lengths: with the final-boss wasp a round runs 4:00 for 450 nectar, without it 3:30 for 400
+// (balanced by simulation; the boss costs the team some collecting time at the end).
+export const MODES = Object.freeze({ boss: Object.freeze({ duration: 240, goal: 450 }), classic: Object.freeze({ duration: 210, goal: 400 }) });
+export const RULES = Object.freeze({ radius: WORLD.radius, capacity: 8, duration: MODES.boss.duration, break: 18, goal: MODES.boss.goal, regrow: 1.2 });
 // Goal celebration: a joyful loop around the hive, then a honeycomb formation (centre + hexagon rings) above it.
 export const CELEBRATION = Object.freeze({ loop: 3.5, loopRadius: 6, height: 8.2, cell: 2.6 });
 // Shift starts a long boost; nectar pickups shorten the recharge.
-export const BOOST = Object.freeze({ duration: 2.5, cooldown: 6, speed: 12.5, refill: 1.2 });
+export const BOOST = Object.freeze({ duration: 4, cooldown: 7.5, speed: 12.5, refill: 1.2 });
 // Speed mode (player only): double-tap the flight direction or press E. Faster flight for a while, then a long recharge.
-export const TURBO = Object.freeze({ duration: 5, cooldown: 20, factor: 1.45 });
+export const TURBO = Object.freeze({ duration: 8, cooldown: 20, factor: 1.45 });
+// The player's bee eases into a new speed and direction (time constant 1/STEER s): smooth arcs, no hard corners.
+export const STEER = 9;
 // A flower whose nectar nobody fetches for `after` seconds wilts (`fade`), stays bare, and a new one
 // grows back (`regrow` in all, the last `grow` seconds visibly sprouting) with fresh nectar.
 export const WILT = Object.freeze({ after: 30, fade: 2.5, regrow: 6, grow: 2 });
@@ -39,12 +46,13 @@ const finite = (n, fallback = 0) => Number.isFinite(n) ? n : fallback;
 const home = id => ({ x: Math.sin(id) * 4, y: 2, z: Math.cos(id) * 4 });
 
 export class Game {
-  constructor({ bots = 6, random = Math.random } = {}) {
+  constructor({ bots = 6, random = Math.random, boss = true } = {}) {
     this.random = random;
+    this.setBoss(boss);
     this.players = new Map();
     this.sequence = 0;
     this.round = 1;
-    this.remaining = RULES.duration;
+    this.remaining = this.duration;
     this.honey = 0;
     this.result = null;
     this.cooldowns = FLOWERS.map(() => 0); this.wilt = FLOWERS.map(() => 0); this.unvisited = FLOWERS.map(() => 0);
@@ -57,7 +65,7 @@ export class Game {
     // While a cutscene plays, the round clock stops and the player's bee waits safely.
     this.cutscene = 0; this.clock = 0;
     this.rainRule = { bumps: RAIN.bumps, window: RAIN.window };
-    scheduleBumblebee(this, RULES.goal);
+    scheduleBumblebee(this, this.goal); scheduleWasp(this); scheduleBeeItems(this);
     for (let i = 0; i < bots; i++) this.addPlayer(true);
   }
   addPlayer(bot = false) {
@@ -68,18 +76,26 @@ export class Game {
     const id = ++this.sequence;
     const p = { id, name: `${bot ? 'Scout' : 'Bee'} ${String(id).padStart(3, '0')}`, bot, ...home(id),
       yaw: 0, bag: 0, score: 0, points: 0, boost: 0, input: { x: 0, y: 0, z: 0, dash: false }, idle: 0, collect: 0, target: id % FLOWERS.length,
-      vx: 0, vy: 0, vz: 0, kx: 0, ky: 0, kz: 0, power: 0, powered: false, wet: 0, shake: 0, bumpLog: [], turbo: 0, turboWait: 0, pace: 1, mood: null, stun: 0, angry: 0, fume: 0, bonk: 0, poke: 0, recoil: 0, distracted: 0, focus: 2 + this.random() * 6, dodge: 0 };
+      vx: 0, vy: 0, vz: 0, mx: 0, my: 0, mz: 0, kx: 0, ky: 0, kz: 0, power: 0, powered: false, wet: 0, shake: 0, bumpLog: [], turbo: 0, turboWait: 0, pace: 1, mood: null, ko: false, caught: false, swarmSlot: -1, slam: 0, crawl: 0, defender: false, extra: false, beeItems: 0, stun: 0, angry: 0, fume: 0, bonk: 0, poke: 0, recoil: 0, distracted: 0, focus: 2 + this.random() * 6, dodge: 0 };
     this.players.set(id, p);
     return p;
   }
   setInput(id, input) {
     const p = this.players.get(id);
     if (!p || !input || typeof input !== 'object') return;
-    p.input = { x: clamp(finite(input.x), -1, 1), y: clamp(finite(input.y), -1, 1), z: clamp(finite(input.z), -1, 1), dash: input.dash === true, turbo: input.turbo === true,
+    p.input = { x: clamp(finite(input.x), -1, 1), y: clamp(finite(input.y), -1, 1), z: clamp(finite(input.z), -1, 1), dash: input.dash === true, turbo: input.turbo === true, slam: input.slam === true,
       face: Number.isFinite(input.face) ? input.face : undefined };
     p.idle = 0;
   }
+  // Final boss on (4:00 rounds) or off (3:30); takes effect with `restartClock` or the next round.
+  setBoss(on) { const mode = on ? MODES.boss : MODES.classic; this.boss = !!on; this.duration = mode.duration; this.goal = mode.goal; }
+  restartClock() { this.remaining = this.duration; scheduleBumblebee(this, this.goal); scheduleWasp(this); }
   boosting(p) { return p.boost > BOOST.cooldown - BOOST.duration; }
+  // The boss fight: swarm commands from the player ('gather', 'formation', 'attack') and the slam check.
+  waspCommand(command) { return waspCommand(this, command); }
+  slamReady(p) { return slamReady(this, p); }
+  // Bee tokens: redeem one for five new bees (defenders during the wasp fight).
+  redeemBeeItem() { return redeemBeeItem(this); }
   // Counts the player's bumps; enough of them within the window bring the rain cloud.
   noteBump(p) {
     if (p.bot || p.wet || this.cutscene) return;
@@ -102,7 +118,7 @@ export class Game {
     dt = clamp(dt, 0, 0.1);
     this.events = [];
     if (this.cutscene) this.cutscene = Math.max(0, this.cutscene - dt);
-    else this.remaining -= dt;
+    else if (!waspActive(this)) this.remaining -= dt; // the clock waits while the wasp is on the island
     if (this.remaining <= 0) {
       if (!this.result) this.finish();
       else this.reset();
@@ -121,10 +137,12 @@ export class Game {
     for (const [key, value] of this.pairs) if (value <= dt) this.pairs.delete(key); else this.pairs.set(key, value - dt);
     for (const [owner, state] of this.toppled) { state.time -= dt; if (state.time <= 0) { this.toppled.delete(owner); this.emit({ type: 'restore', owner, kind: state.kind, x: state.x, y: 1.2, z: state.z }); } }
     tickBumblebee(this, dt);
+    tickWasp(this, dt);
+    tickBeeItems(this, dt);
     for (const p of this.players.values()) this.move(p, dt);
     this.separate();
     for (const p of this.players.values()) this.gather(p);
-    if (this.honey >= RULES.goal) this.finish();
+    if (this.honey >= this.goal) this.finish();
   }
   move(p, dt) {
     p.idle += dt;
@@ -132,7 +150,7 @@ export class Game {
     const wasBoosting = this.boosting(p);
     p.boost = Math.max(0, p.boost - dt);
     if (p.bot) this.steer(p, dt);
-    let input = (p.idle > 0.5 || this.cutscene) && !p.bot ? { x: 0, y: 0, z: 0, dash: false } : p.input;
+    let input = (p.idle > 0.5 || this.cutscene || p.slam) && !p.bot ? { x: 0, y: 0, z: 0, dash: false } : p.input;
     if (p.stun) input = { ...input, x: input.x * (p.bot ? 0 : 0.3), y: input.y * (p.bot ? 0 : 0.3), z: input.z * (p.bot ? 0 : 0.3), dash: false, turbo: false };
     // Bouncing off something heavy: steering barely works for a moment.
     else if (p.recoil) input = { ...input, x: input.x * 0.15, y: input.y * 0.15, z: input.z * 0.15 };
@@ -149,14 +167,17 @@ export class Game {
     }
     const speed = (this.boosting(p) ? BOOST.speed : SPEED * (p.turbo ? TURBO.factor : 1)) * (p.bot ? BOT_SPEED * p.pace : 1) * loadFactor(p.bag) * (p.wet ? RAIN.slow : 1);
     if (wasBoosting && !this.boosting(p)) { this.emit({ type: 'boost-end', id: p.id, power: p.powered }); if (p.powered) { p.powered = false; p.power = 0; } }
-    p.vx = input.x / length * speed + p.kx; p.vz = input.z / length * speed + p.kz;
-    p.vy = clamp(input.y, -1, 1) * CLIMB * (this.boosting(p) ? 1.3 : 1) + p.ky;
+    const k = p.bot ? 1 : 1 - Math.exp(-dt * STEER); // scouts already steer smoothly
+    p.mx += (input.x / length * speed - p.mx) * k; p.mz += (input.z / length * speed - p.mz) * k; p.my += (clamp(input.y, -1, 1) * CLIMB * (this.boosting(p) ? 1.3 : 1) - p.my) * k;
+    if (Math.abs(p.mx) + Math.abs(p.my) + Math.abs(p.mz) < 0.01 && !input.x && !input.y && !input.z) p.mx = p.my = p.mz = 0; // settled: really still
+    p.vx = p.mx + p.kx; p.vz = p.mz + p.kz; p.vy = p.my + p.ky;
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
     // Knockback fades quickly; stunned bees tumble a little longer.
     const fade = Math.exp(-dt * (p.stun ? 1.4 : 2.6));
     p.kx *= fade; p.ky = p.ky * fade - (p.stun ? 4 * dt : 0); p.kz *= fade;
     if (Math.hypot(p.kx, p.ky, p.kz) < 0.03 && !p.stun) p.kx = p.ky = p.kz = 0;
     if (Number.isFinite(input.face) && !p.bot) p.yaw = input.face;
+    else if (!p.bot && Math.hypot(p.mx, p.mz) > 0.4) p.yaw = Math.atan2(p.mx, p.mz); // faces where it really flies
     else if (input.x || input.z) p.yaw = Math.atan2(input.x, input.z);
     this.confine(p);
   }
@@ -165,6 +186,7 @@ export class Game {
     if (p.y > WORLD.ceiling) { p.y = WORLD.ceiling; p.ky = Math.min(0, p.ky); }
     const radius = Math.hypot(p.x, p.z);
     if (radius > RULES.radius) { p.x *= RULES.radius / radius; p.z *= RULES.radius / radius; p.kx *= 0.4; p.kz *= 0.4; }
+    if (p.ko) return; // knocked out by the wasp: drops straight into the grass, past flowers and leaves
     for (const o of OBSTACLES) {
       if (Math.abs(p.x - o.x) > 6 || Math.abs(p.z - o.z) > 6 || !this.standing(o)) continue;
       const c = contact(o, p.x, p.y, p.z), overlap = WORLD.beeRadius - c.gap;
@@ -217,7 +239,7 @@ export class Game {
       p.score += p.bag; p.points += points; this.honey += p.bag; p.bag = 0;
       if (p.bot) this.pickFlower(p);
     }
-    if (p.bag < RULES.capacity && !p.collect && !p.stun) {
+    if (p.bag < RULES.capacity && !p.collect && !p.stun && !p.ko && !p.caught) {
       for (const flower of FLOWERS) {
         if (!this.cooldowns[flower.id] && Math.hypot(p.x - flower.x, p.z - flower.z, p.y - flower.y) < 1.7) {
           p.bag++; p.collect = 0.25; this.cooldowns[flower.id] = RULES.regrow;
@@ -241,6 +263,8 @@ export class Game {
   }
   // Scouts fly to nectar or the hive, steer around obstacles and each other, and dodge the bumblebee.
   steer(p, dt) {
+    if (steerCrawl(this, p, dt)) return; // a new bee still crawling out of the hive
+    if (steerForWasp(this, p, dt)) return; // knocked out, caught, or flying in the swarm
     if (heistActive(this)) { // Everyone rushes to push the honey thief off the hive.
       const b = this.bumble, angle = p.id * 2.4, ring = p.poke ? 2.8 : 0;
       const dx = b.x + Math.sin(angle) * ring - p.x, dy = b.y + (p.id % 3 - 1) * 0.35 - p.y, dz = b.z + Math.cos(angle) * ring - p.z, d = Math.hypot(dx, dz) || 1e-6;
@@ -321,8 +345,8 @@ export class Game {
       Object.assign(p, { kx: 0, ky: 0, kz: 0, stun: 0, angry: 0, fume: 0 });
     });
   }
-  finish() {
-    this.result = this.honey >= RULES.goal ? 'complete' : 'time';
+  finish(result) {
+    this.result = result ?? (this.honey >= this.goal ? 'complete' : 'time');
     this.celebration = this.result === 'complete' ? { t: 0 } : null;
     this.bumbleWarn = 0; // no bumblebee announcement carries over into the round break
     this.emit({ type: 'round-end', result: this.result });
@@ -334,14 +358,18 @@ export class Game {
       this.scores = [...this.scores, { round: this.round, points: player.points }].sort((a, b) => b.points - a.points).slice(0, 5);
     }
     if (this.bumble) { this.bumble = null; this.emit({ type: 'bumble-leave' }); }
+    this.wasp = null; this.waspDone = true;
   }
   reset() {
-    this.round++; this.remaining = RULES.duration; this.honey = 0; this.result = null; this.celebration = null; this.cooldowns.fill(0); this.wilt.fill(0); this.unvisited.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
-    scheduleBumblebee(this, RULES.goal);
+    this.round++; this.remaining = this.duration; this.honey = 0; this.result = null; this.celebration = null; this.cooldowns.fill(0); this.wilt.fill(0); this.unvisited.fill(0); this.pairs.clear(); this.toppled.clear(); this.bumble = null; this.events = []; this.cutscene = 0;
+    scheduleBumblebee(this, this.goal);
     for (const p of this.players.values()) {
-      Object.assign(p, home(p.id), { score: 0, points: 0, bag: 0, boost: 0, power: 0, powered: false, wet: 0, shake: 0, bumpLog: [], turbo: 0, turboWait: 0, kx: 0, ky: 0, kz: 0, vx: 0, vy: 0, vz: 0, stun: 0, angry: 0, fume: 0 });
+      Object.assign(p, home(p.id), { score: 0, points: 0, bag: 0, boost: 0, power: 0, powered: false, wet: 0, shake: 0, bumpLog: [], turbo: 0, turboWait: 0, ko: false, caught: false, swarmSlot: -1, slam: 0, kx: 0, ky: 0, kz: 0, vx: 0, vy: 0, vz: 0, mx: 0, my: 0, mz: 0, stun: 0, angry: 0, fume: 0 });
     }
+    for (const [id, p] of this.players) if (p.extra) this.players.delete(id); // reinforcements stay for one round
+    for (const p of this.players.values()) p.beeItems = 0;
+    scheduleWasp(this); scheduleBeeItems(this);
   }
 }
-export { BUMBLE, HEIST, SHOVE };
+export { BUMBLE, HEIST, SHOVE, WASP, BEE_ITEM };
 export { OBSTACLES };

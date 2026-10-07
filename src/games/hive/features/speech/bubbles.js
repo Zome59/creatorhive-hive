@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-const MAX = 8;
+const MAX = 8, READ = 1.2; // one bubble per speaker; a newer one waits until the current one was up READ s
 
 // Comic speech bubbles and sound words drawn as HTML over the canvas, following bees on screen.
 // Text is set with textContent only.
@@ -19,9 +19,9 @@ export function createBubbles(layer, { random = Math.random } = {}) {
   function remove(index) { const [item] = items.splice(index, 1); item?.anchor.remove(); }
   return {
     say(id, text, { style = 'talk', delay = 0 } = {}) {
-      const existing = items.findIndex(i => i.kind === 'say' && i.id === id && i.delay <= 0);
-      if (existing >= 0 && delay <= 0) remove(existing);
-      add({ kind: 'say', id, delay, life: clamp(1.8 + text.length * 0.065, 2.6, 5) }, text, `bubble ${style}`);
+      // At most one bubble per speaker on screen and one waiting: the newest waiting line wins.
+      for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === 'say' && items[i].id === id && items[i].delay > 0) remove(i);
+      add({ kind: 'say', id, delay: Math.max(delay, 1e-6), life: clamp(1.8 + text.length * 0.065, 2.6, 5) }, text, `bubble ${style}`);
     },
     pow(position, text, style = 'bump') {
       add({ kind: 'pow', world: new THREE.Vector3(position.x, position.y, position.z), delay: 0, life: 0.95 }, text, `pow ${style}`);
@@ -30,7 +30,14 @@ export function createBubbles(layer, { random = Math.random } = {}) {
     update(dt, camera, width, height, locate) {
       for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
-        if (item.delay > 0) { item.delay -= dt; if (item.delay > 0) continue; }
+        if (item.delay > 0) {
+          item.delay -= dt; if (item.delay > 0) continue;
+          if (item.kind === 'say') { // taking over from the speaker's current bubble, once that one could be read
+            const shown = items.find(o => o !== item && o.kind === 'say' && o.id === item.id && o.delay <= 0);
+            if (shown && shown.age < READ) { item.delay = READ - shown.age; continue; }
+            if (shown) remove(items.indexOf(shown)), i = items.indexOf(item);
+          }
+        }
         if (!item.anchor.isConnected) layer.appendChild(item.anchor);
         item.age += dt;
         const position = item.world ?? locate(item.id);

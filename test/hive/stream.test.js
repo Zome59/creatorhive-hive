@@ -108,13 +108,17 @@ test('stones are decorative: banks, spring, stream bed, and meadow, clear of flo
   const { stones } = createStream(), count = kind => stones.filter(s => s.kind === kind).length;
   assert.ok(count('meadow') === 40 && count('bank') >= 20 && count('spring') >= 4, `${count('meadow')} meadow, ${count('bank')} bank`);
   for (const s of stones) {
-    assert.ok([s.x, s.y, s.z, s.radius].every(Number.isFinite) && s.radius > 0.05 && s.radius < 0.6, JSON.stringify(s));
+    const big = s.kind === 'boulder'; // the rocks the spring wells up from are deliberately larger
+    assert.ok([s.x, s.y, s.z, s.radius].every(Number.isFinite) && s.radius > 0.05 && s.radius < (big ? 0.85 : 0.6), JSON.stringify(s));
     assert.ok(radius(s) >= 5, `${s.kind} stone inside the hive area`);
     assert.ok(near(FLOWERS, s.x, s.z) >= 1, `${s.kind} stone ${near(FLOWERS, s.x, s.z).toFixed(2)} from a flower`);
-    assert.ok(s.y > 0 && s.y < 0.5, `stone height ${s.y}`);
+    assert.ok(s.y > 0 && s.y < (big ? 1.1 : 0.5), `stone height ${s.y}`);
   }
   for (const s of stones.filter(s => s.kind === 'meadow')) { assert.ok(radius(s) >= 6 - 0.6 && radius(s) <= 29.5); assert.ok(streamDistance(s.x, s.z) > 0.8, 'meadow stone in the water'); }
   const banks = stones.filter(s => s.kind === 'bank'); assert.ok(banks.every(s => streamDistance(s.x, s.z) < 1.2 && streamDistance(s.x, s.z) > -1.2), 'bank stones hug the water');
+  const boulders = stones.filter(s => s.kind === 'boulder');
+  assert.equal(boulders.length, 4, 'four boulders at the spring');
+  assert.ok(boulders.every(s => Math.hypot(s.x - STREAM[0].x, s.z - STREAM[0].z) < 1.4), 'right at the spring');
   t.diagnostic(`stones: ${stones.length}`);
 });
 

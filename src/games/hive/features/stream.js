@@ -107,7 +107,8 @@ export function createStream() {
   sample.push(arc);
   for (const s of sample) {
     const p = at(s), t = tangent(s);
-    brookRows.push({ x: p.x, y: STREAM_Y, z: p.z, hw: widthAt(s / arc * LENGTH) / 2, v: s / BROOK_TILE, nx: 0, ny: 1, nz: 0, alpha: 1, tint: 1, sx: -t.z, sz: t.x });
+    // Deeper, darker water where it wells up, brightening downstream.
+    brookRows.push({ x: p.x, y: STREAM_Y, z: p.z, hw: widthAt(s / arc * LENGTH) / 2, v: s / BROOK_TILE, nx: 0, ny: 1, nz: 0, alpha: 1, tint: 0.66 + 0.34 * smooth(s / 1.8), sx: -t.z, sz: t.x });
   }
   const brookGeometry = ribbon(brookRows);
 
@@ -149,7 +150,12 @@ export function createStream() {
   }
   { // a ring of larger stones around the back of the spring
     const p = at(0.9), t = tangent(0.9), base = Math.atan2(-t.z, -t.x);
-    for (let i = 0; i < 8; i++) { const a = base + (i / 7 - 0.5) * 2.6, r = 0.95 + rand() * 0.3, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r; if (clear(x, z)) addStone('spring', x, z, 0.2 + rand() * 0.14); }
+    for (let i = 0; i < 8; i++) { const a = base + (i / 7 - 0.5) * 2.6, r = 1.0 + rand() * 0.3, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r; if (clear(x, z)) addStone('spring', x, z, 0.26 + rand() * 0.18); }
+  }
+  { // boulders the water wells up from under: one big rock, two flanking it, and a smaller one stacked on top
+    const p = at(0), t = tangent(0), side = (k, a) => [p.x - t.x * a - t.z * k, p.z - t.z * a + t.x * k];
+    for (const [k, a, size] of [[0, 0.62, 0.66], [-0.82, 0.32, 0.5], [0.8, 0.36, 0.46]]) { const [x, z] = side(k, a); addStone('boulder', x, z, size, 0.42); }
+    const [x, z] = side(0.18, 0.78); addStone('boulder', x, z, 0.36, 0.42); stones[stones.length - 1].y += 0.42; // stacked on the big one
   }
   for (let i = 0; i < 8; i++) { // a few stones breaking the surface
     const s = 2.2 + (arc - 5) * (i + rand() * 0.6) / 8, p = at(s), t = tangent(s), hw = widthAt(s / arc * LENGTH) / 2, off = (rand() - 0.5) * hw * 0.8;
@@ -170,6 +176,8 @@ export function createStream() {
   const dummy = new THREE.Object3D(), tint = new THREE.Color();
   stones.forEach((s, i) => { dummy.position.set(s.x, s.y, s.z); dummy.rotation.set(s.tilt, s.yaw, -s.tilt * 0.7); dummy.scale.set(s.sx, s.sy, s.sz); dummy.updateMatrix(); stoneMesh.setMatrixAt(i, dummy.matrix); stoneMesh.setColorAt(i, tint.set(s.color)); });
   stoneMesh.name = 'stream-stones'; stoneMesh.castShadow = stoneMesh.receiveShadow = true; group.add(stoneMesh);
+  const spring0 = at(0), damp = new THREE.Mesh(new THREE.CircleGeometry(1.7, 32), new THREE.MeshStandardMaterial({ color: '#2f4a24', roughness: 1, transparent: true, opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+  damp.rotation.x = -Math.PI / 2; damp.position.set(spring0.x, STREAM_Y - 0.004, spring0.z); damp.scale.set(1, 0.8, 1); damp.receiveShadow = true; damp.name = 'stream-spring-damp'; group.add(damp);
 
   // --- spray: mist where the fall dissolves, splashes at the lip, sparkles on the brook (one additive Points set)
   const MIST = 28, SPLASH = 14, SPARK = 14, N = MIST + SPLASH + SPARK, bottom = fallRows[fallRows.length - 1];

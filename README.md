@@ -1,6 +1,6 @@
 # The Hive
 
-Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 350 nectar in three minutes. Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
+Honey Retrieval is a local, single-player 3D bee game for CreatorHive's livestream. Fly through a large floating hexagonal garden with natural grass, earth, and stone, trees to weave around, flowers at three heights, and honey-colored AI scouts, collect glossy honey drops from the flowers, and return them to the golden straw hive. Six AI scouts contribute to a shared goal of 450 nectar in four minutes (with the final-boss wasp; switch it off under **⚙ Game settings** for 400 nectar in three and a half minutes). Around the middle of each round a clumsy bumblebee crashes the party. Rounds restart automatically.
 
 ## Run locally
 
@@ -94,8 +94,8 @@ Publishing is performed by Cloudflare's connected build after you push a commit.
 | --- | --- |
 | WASD or arrow keys | Fly relative to the camera (garden view) |
 | Space / C | Climb / sink (between the grass and the treetops); the same keys whether you steer with WASD or the arrow keys |
-| Shift | 2.5-second boost; recharges in 3.5 seconds, faster with every nectar you collect. When your bee glows, it is a **power boost** |
-| E, or double-tap the key you fly with | **Speed mode**: 45 % faster for 5 seconds, then 20 seconds to recharge (the blue **SPEED** meter in the HUD fills up again) |
+| Shift | 4-second boost; recharges in 3.5 seconds, faster with every nectar you collect. When your bee glows, it is a **power boost** |
+| E, or double-tap the key you fly with | **Speed mode**: 45 % faster for 8 seconds, then 20 seconds to recharge (the blue **SPEED** meter in the HUD fills up again) |
 | V or 👁 button | Toggle **bee view** (first person) |
 | Left click + drag | Rotate the garden view; in bee view, look around |
 | Scroll wheel | Zoom in / out (garden view) |
@@ -121,23 +121,35 @@ Each round opens with a short flight: the camera circles the floating island fro
 
 A small brook springs up in a pond in the meadow, meanders between the flowers to the island's rim, and pours over the edge as a waterfall that fades into mist far below. Pebbles line its banks and lie in its bed, and small stones are scattered across the meadow. Low round bushes dot the field (solid, so fly over them), and trees and flowers differ in height, from small to tall. You hear the brook from wherever it is closest to your bee, and the waterfall roars a little deeper near the rim.
 
+### The wasp: final boss
+
+Near the end of the round (about 25 seconds before time runs out, give or take 8), a wasp climbs up the outside of the island: first its claws and snout show over the edge, then it flips up to just above the treetops, and only then does the alarm sound (**⚠ WASP ATTACK**). From then until it is gone, the round clock stands still.
+
+The wasp grabs the nearest scout; the scout fights back for a moment, then drops to the grass knocked out, and the wasp goes for the next one. **Tap X three times fast** to gather the remaining scouts into a swarm around you, **tap X three times again** for the attack formation (the camera moves behind you), then hit the big **⚔ ATTACK** button (or Enter): the camera rides behind the swarm as it flies at the wasp. While the swarm pokes it, the wasp is dazed and barely moves; every few seconds it breaks free, shakes the swarm off, and gets a few metres closer to the hive before the swarm is back on it.
+
+To beat it, **fly above its head and press Space**: your bee drops onto it butt first (a ring over its head lights up when you are in position). After **five slams** it falls on its back, kicks its legs in the air like a beetle, rights itself, and reels off dizzily over the rim; the camera follows it until a star pings in the sky where it vanishes. Meanwhile **HIVE DEFENDED!** bounces in, confetti flies, a little fanfare plays, and every scout (the knocked-out ones get back up) flies into a slowly turning honeycomb formation around your bee: +150 points. Flying into its body only gets you swatted. If it reaches the hive first, it kicks the hive in, honey spills out, it eats most of it and flies off; the light goes down and **WASTED** fades in. The boss bar under the top bar shows your slams, the swarm size, and how many scouts are down.
+
+### Bee tokens
+
+Now and then (first after about 40–60 seconds, then every 45–70) a **bee token** floats above a flower: a little golden bee in a ring of light. Only you can pick it up (up to three; it blinks and fades after 20 seconds if nobody does). The HUD shows **🐝 ×n · B**. Press **B** and five new bees crawl out of the hive door over the landing board, hop up, and go collecting like the scouts until the round ends. Or save it for the wasp: during the fight a big button asks whether to call **five defender bees**; they come out wearing a red sash with a gold star, are a third stronger than scouts, and the whole swarm charges at once. With defenders on it the wasp stays dazed longer, shakes them off less, gains less ground towards the hive, and a defender holds out longer in its mandibles.
+
 ### Wilting flowers
 
 A flower whose honey drop nobody fetches for about 30 to 40 seconds wilts: it droops, sinks to the ground, and its drop disappears. A few seconds later a new flower sprouts in its place, with a fresh drop.
 
 ### Honey in the hive
 
-A ring of 30 honeycomb cells around the hive base shows the hive's honey, one cell per 10 nectar. Delivered nectar flies into the next cells as droplets; cells you filled are **orange**, the scouts' are **gold**, and the HUD bar shows your share in orange too. When the bumblebee drinks, the newest cells empty first.
+A ring of honeycomb cells (45 with the wasp, 40 without) around the hive base shows the hive's honey, one cell per 10 nectar. Delivered nectar flies into the next cells as droplets; cells you filled are **orange**, the scouts' are **gold**, and the HUD bar shows your share in orange too. When the bumblebee drinks, the newest cells empty first.
 
 ### Goal reached
 
-When the hive reaches 350 nectar the round ends in a party: the hive swells, golden honey floods out until it covers about a third of the island, the trees turn gold, and all bees loop around the hive cheering before they form a slowly turning **honeycomb** above it (your bee in the centre, the six scouts around it). The camera frames the party; after six seconds the highscore table appears.
+When the hive reaches its goal the round ends in a party: the hive swells, golden honey floods out until it covers about a third of the island, the trees turn gold, and all bees loop around the hive cheering before they form a slowly turning **honeycomb** above it (your bee in the centre, the six scouts around it). The camera frames the party; after six seconds the highscore table appears.
 
 The goal is tuned to be reachable but not trivial: in simulations, six scouts on their own rarely make it in time, and an average player who also chases the honey thief off the hive gets there with roughly a minute to spare.
 
 ### Load, points, and highscore
 
-The bees have soft **shell fur** (the surface drawn again in a few thin, outward layers with strands cut by a shader, as in real-time fur demos); the bumblebee gets 32 layers up close and in its cutscene, and fewer layers with distance. Collected nectar shows as golden pollen baskets on your bee's hind legs, growing with every drop (scouts carry theirs too). From half a bag on the load weighs you down, gently at first and more with every drop: about 6 % slower at 4 of 8, 27 % slower with a full bag. A short hint appears when you reach half a bag, and the HUD shows the current slowdown. Delivering to the hive makes you fast again and scores **10 points per nectar**, with a **×1.5 bonus for 6–7 drops and ×2 for a full bag**, so you choose between quick trips and big, slow, risky ones. The HUD shows your score and the best round of this page session. After every round, won or not, the **highscore table** (top 10 of this page session) appears with your entry already added under your last initials; type up to three letters or digits to change them, arcade style. Scores and initials are kept in memory only and are gone after a page refresh.
+The bees have soft **shell fur** (the surface drawn again in a few thin, outward layers with strands cut by a shader, as in real-time fur demos); the bumblebee gets 32 layers up close and in its cutscene, and fewer layers with distance. Collected nectar shows as golden pollen baskets on all six legs: the load fills the hind pair first, then the middle and the front pair, so a full bag (8 drops) has all six baskets bulging (scouts carry theirs too). From half a bag on the load weighs you down, gently at first and more with every drop: about 6 % slower at 4 of 8, 27 % slower with a full bag. A short hint appears when you reach half a bag, and the HUD shows the current slowdown. Delivering to the hive makes you fast again and scores **10 points per nectar**, with a **×1.5 bonus for 6–7 drops and ×2 for a full bag**, so you choose between quick trips and big, slow, risky ones. The HUD shows your score and the best round of this page session. After every round, won or not, the **highscore table** (top 10 of this page session) appears with your entry already added under your last initials; type up to three letters or digits to change them, arcade style. Scores and initials are kept in memory only and are gone after a page refresh.
 
 ### Nectar power
 

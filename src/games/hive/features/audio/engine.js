@@ -3,7 +3,7 @@ import { HIVE_SOUNDS, MIXER, MIX_MAX, soundFiles } from './manifest.js';
 const BASE = import.meta.env?.BASE_URL ?? '/';
 const SETTINGS = new Map(HIVE_SOUNDS.map(sound => [sound.name, sound]));
 // Inverse distance model: full volume within REF of the player bee, then falling off smoothly.
-export const SPATIAL = Object.freeze({ ref: 1.6, rolloff: 2.6, max: 80 });
+export const SPATIAL = Object.freeze({ ref: 2, rolloff: 2, max: 80 }); // gentle: bees get louder as they near, without jumping out
 export const distanceGain = d => SPATIAL.ref / (SPATIAL.ref + SPATIAL.rolloff * (Math.min(Math.max(d, SPATIAL.ref), SPATIAL.max) - SPATIAL.ref));
 
 // Encoder padding can leave a few silent samples at the ends of an MP3; loops skip them.
@@ -31,16 +31,18 @@ export function createHiveAudio({ createContext = defaultContext, load = default
   const buffers = new Map(), loops = new Map(), voices = new Set(), buses = new Map(), requested = new Set();
   const levels = new Map(MIXER.map(channel => [channel.id, 1]));
   const output = bus => buses.get(bus) ?? master;
+  // Sliders follow the ear: the gain is the slider squared (50 % ≈ -12 dB, 150 % ≈ +7 dB).
+  const gainOf = level => level * level;
   function setup() {
     if (context) return context;
     try {
       context = createContext(); if (!context) return null;
       master = context.createGain(); master.gain.value = 0;
       const compressor = context.createDynamicsCompressor();
-      compressor.threshold.value = -10; compressor.knee.value = 10; compressor.ratio.value = 4;
+      compressor.threshold.value = -6; compressor.knee.value = 8; compressor.ratio.value = 3; // only catches peaks, so the sliders keep their effect
       master.connect(compressor); compressor.connect(context.destination);
       // One gain per mixer channel, all feeding the master (whose level is the master slider).
-      for (const channel of MIXER) if (channel.id !== 'master') { const bus = context.createGain(); bus.gain.value = levels.get(channel.id); bus.connect(master); buses.set(channel.id, bus); }
+      for (const channel of MIXER) if (channel.id !== 'master') { const bus = context.createGain(); bus.gain.value = gainOf(levels.get(channel.id)); bus.connect(master); buses.set(channel.id, bus); }
     } catch { context = null; master = null; return null; } // No Web Audio: the game stays silent.
     for (const file of HIVE_SOUNDS.filter(sound => !sound.lazy).flatMap(soundFiles)) fetchFile(file);
     return context;
@@ -70,7 +72,7 @@ export function createHiveAudio({ createContext = defaultContext, load = default
   function apply(fade = 0.05) {
     if (!master) return;
     master.gain.cancelScheduledValues(context.currentTime);
-    master.gain.setTargetAtTime(enabled ? volume * levels.get('master') * mix : 0, context.currentTime, fade);
+    master.gain.setTargetAtTime(enabled ? volume * gainOf(levels.get('master')) * mix : 0, context.currentTime, fade);
   }
   function stopLoop(key) {
     const loop = loops.get(key); if (!loop) return;
@@ -86,7 +88,7 @@ export function createHiveAudio({ createContext = defaultContext, load = default
       if (!levels.has(id) || !Number.isFinite(value)) return;
       levels.set(id, Math.max(0, Math.min(MIX_MAX, value)));
       if (id === 'master') apply();
-      else if (buses.has(id)) buses.get(id).gain.setTargetAtTime(levels.get(id), context.currentTime, 0.03);
+      else if (buses.has(id)) buses.get(id).gain.setTargetAtTime(gainOf(levels.get(id)), context.currentTime, 0.03);
     },
     resetLevels() { for (const id of levels.keys()) this.setLevel(id, 1); },
     // Overall scale with a soft transition, e.g. 0.3 on the landing screen fading to 1 when play starts.

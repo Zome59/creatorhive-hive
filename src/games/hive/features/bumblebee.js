@@ -46,6 +46,7 @@ function announce(game, mode) {
   game.emit({ type: 'bumble-warning', mode, seconds: BUMBLE.warning, angle, x: Math.sin(angle) * WORLD.radius, z: Math.cos(angle) * WORLD.radius });
 }
 function schedule(game, dt) {
+  if (game.wasp) return; // no bumblebee visits while the wasp is on the island
   if (game.bumble) { game.bumbleGone = 0; return; }
   game.bumbleGone += dt;
   if (game.bumbleWarn) {

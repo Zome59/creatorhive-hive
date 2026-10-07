@@ -318,3 +318,72 @@
 .garden-ui .intro small { font-size: 11.5px; }
 
 }
+
+/* Thought bubble: soft and round, with two little circles instead of a pointed tail. */
+.garden-ui .bubble.think { background: #f2f5ff; color: #2f3550; font-style: italic; border-radius: 28px; }
+.garden-ui .bubble.think::before, .garden-ui .bubble.think::after { border-width: 3px; border-color: #17140f; border-radius: 50%; background: #f2f5ff; transform: none; }
+.garden-ui .bubble.think::before { bottom: -19px; left: calc(50% - 20px); width: 13px; height: 13px; }
+.garden-ui .bubble.think::after { bottom: -31px; left: calc(50% - 27px); width: 7px; height: 7px; }
+
+/* Boss fight: the wasp's bar under the top bar, the big swarm prompt and attack button, the slam hint, and WASTED. */
+.garden-ui .boss-bar { position: absolute; z-index: 1100; left: 50%; top: 86px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 9px 16px; border: 2px solid #ffd21a; border-radius: 3px; background: #1a1408ee; color: #fff3c4; font-size: 14px; letter-spacing: 1.4px; pointer-events: none; }
+.garden-ui .boss-bar strong { color: #ffd21a; }
+.garden-ui .boss-hits { display: flex; gap: 5px; }
+.garden-ui .boss-hits i { width: 16px; height: 16px; border: 2px solid #ffd21a; border-radius: 50%; }
+.garden-ui .boss-hits i.hit { background: #ffd21a; box-shadow: 0 0 10px #ffd21a; }
+.garden-ui .boss-bar small { color: #cbbf93; font-size: 12px; letter-spacing: .6px; }
+.garden-ui.top-busy .boss-bar { top: 166px; }
+.garden-ui .swarm-prompt { position: absolute; z-index: 1100; left: 50%; top: 58%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 22px; border: 2px solid #ffd21a; border-radius: 6px; background: #1a1408dd; color: #fff3c4; font-size: 16px; text-align: center; pointer-events: none; animation: garden-tip .4s cubic-bezier(.2, 1.5, .4, 1) both; }
+.garden-ui .swarm-keys { display: flex; gap: 8px; }
+.garden-ui .swarm-keys kbd { min-width: 44px; padding: 8px 10px; border: 2px solid #ffd21a; border-radius: 6px; background: #3a2c08; color: #ffd21a; font-size: 22px; font-weight: 800; box-shadow: 0 4px 0 #6b520e; animation: garden-key 1s ease-in-out infinite; }
+.garden-ui .swarm-keys kbd:nth-child(2) { animation-delay: .12s; }
+.garden-ui .swarm-keys kbd:nth-child(3) { animation-delay: .24s; }
+@keyframes garden-key { 0%, 70%, 100% { transform: translateY(0); } 80% { transform: translateY(3px); box-shadow: 0 1px 0 #6b520e; } }
+.garden-ui .swarm-taps { display: flex; gap: 6px; height: 10px; }
+.garden-ui .swarm-taps b { width: 10px; height: 10px; border-radius: 50%; background: #5a4a20; }
+.garden-ui .swarm-taps b.on { background: #ffd21a; }
+.garden-ui .swarm-attack { position: absolute; z-index: 1150; left: 50%; top: 58%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 40px; border: 3px solid #fff3c4; border-radius: 10px; background: #c21d10; color: #fff; font-size: 30px; font-weight: 900; letter-spacing: 2px; cursor: pointer; box-shadow: 0 6px 0 #6e0d06, 0 0 40px #ff5a3d88; animation: garden-attack 0.9s ease-in-out infinite; }
+.garden-ui .swarm-attack small { font-size: 12px; font-weight: 500; letter-spacing: 1px; opacity: .85; }
+@keyframes garden-attack { 50% { transform: translate(-50%, -50%) scale(1.06); } }
+.garden-ui .slam-prompt { position: absolute; z-index: 1100; left: 50%; top: 40%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 12px; padding: 10px 18px; border: 2px solid #ffe14a; border-radius: 6px; background: #1a1408dd; color: #ffe14a; font-size: 20px; letter-spacing: 1.5px; pointer-events: none; }
+.garden-ui .slam-prompt kbd { padding: 4px 10px; border: 2px solid #ffe14a; border-radius: 4px; font-size: 16px; }
+.garden-ui .wasted { position: absolute; z-index: 1300; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(ellipse at center, #00000033, #000000aa); pointer-events: none; animation: garden-wasted 1.6s ease-out both; }
+.garden-ui .wasted strong { color: #d4161b; font: 900 clamp(48px, 11vw, 120px) / 1 Impact, 'Arial Black', sans-serif; letter-spacing: 6px; text-shadow: 0 0 2px #000, 3px 3px 0 #000, -2px -2px 0 #000, 0 0 30px #000; }
+.garden-ui .wasted small { color: #f2e9dc; font-size: 16px; text-shadow: 0 1px 3px #000; }
+@keyframes garden-wasted { from { opacity: 0; transform: scale(1.25); } to { opacity: 1; transform: scale(1); } }
+@media (max-width: 480px) {
+.garden-ui .boss-bar { top: 120px; font-size: 12px; gap: 8px; }
+.garden-ui.top-busy .boss-bar { top: 218px; }
+.garden-ui .swarm-prompt { font-size: 14px; padding: 12px 14px; }
+.garden-ui .swarm-attack { font-size: 24px; padding: 14px 26px; }
+.garden-ui .slam-prompt { font-size: 16px; }
+
+}
+@media (prefers-reduced-motion: reduce) {
+.garden-ui .swarm-keys kbd, .garden-ui .swarm-attack, .garden-ui .wasted { animation: none; }
+
+}
+
+/* Bee tokens: a counter in the flight HUD, and the big call button during the wasp fight. */
+.garden-ui .bee-tokens { display: flex; align-items: center; gap: 6px; color: #ffd84a; font-size: 13px; }
+.garden-ui .bee-tokens kbd { padding: 1px 6px; border: 1px solid #ffd84a; border-radius: 3px; font-size: 11px; }
+.garden-ui .defender-call { position: absolute; z-index: 1150; right: 24px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 20px; border: 3px solid #ffd84a; border-radius: 8px; background: #8e1020; color: #fff; font-size: 17px; font-weight: 800; letter-spacing: .6px; cursor: pointer; box-shadow: 0 5px 0 #4d0710, 0 0 30px #ffd84a66; animation: garden-attack 1.2s ease-in-out infinite; }
+.garden-ui .defender-call small { font-size: 12px; font-weight: 500; opacity: .9; }
+@media (max-width: 480px) {
+.garden-ui .defender-call { right: 50%; top: 30%; transform: translate(50%, -50%); font-size: 14px; padding: 10px 14px; }
+
+}
+@media (prefers-reduced-motion: reduce) {
+.garden-ui .defender-call { animation: none; }
+
+}
+
+/* Beating the wasp: a golden banner that bounces in while confetti flies. */
+.garden-ui .victory { position: absolute; z-index: 1300; left: 50%; top: 30%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; animation: garden-victory 0.7s cubic-bezier(.2, 1.6, .4, 1) both; }
+.garden-ui .victory strong { color: #ffd21a; font: 900 clamp(36px, 7vw, 84px) / 1 Impact, 'Arial Black', sans-serif; letter-spacing: 4px; text-shadow: 0 0 2px #3a2400, 3px 3px 0 #3a2400, -2px -2px 0 #3a2400, 0 0 34px #ffb300aa; }
+.garden-ui .victory small { color: #fff6d8; font-size: 17px; text-shadow: 0 1px 3px #000; }
+@keyframes garden-victory { from { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-6deg); } to { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); } }
+@media (prefers-reduced-motion: reduce) {
+.garden-ui .victory { animation: none; }
+
+}

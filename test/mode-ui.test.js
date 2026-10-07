@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGameHost } from '../src/game-host.js';
 import { game as hiveModule } from '../src/games/hive/index.js';
+import { RULES } from '../src/games/hive/simulation.js';
 import { game as officeModule } from '../src/games/worker-bee/index.js';
 import { Window } from 'happy-dom';
 
@@ -47,7 +48,7 @@ test('office replaces all garden overlays and switching back preserves the garde
       assert.equal(document.getElementById('intro'), intro);
       assert.equal(intro.hidden, true, 'switching must not restart the garden');
       assert.equal(inventory.hidden, false, 'the active garden inventory must return');
-      assert.equal(document.getElementById('timer').textContent, '3:00');
+      assert.equal(document.getElementById('timer').textContent, `${Math.floor(RULES.duration / 60)}:${String(RULES.duration % 60).padStart(2, '0')}`, 'the clock still shows the full round');
     }
   } finally {
     for (const [key, value] of Object.entries(previous)) {

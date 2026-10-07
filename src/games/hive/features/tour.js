@@ -4,7 +4,7 @@ import { readingTime } from './reading.js';
 
 // Each caption stays at least as long as it takes to read it.
 export const TOUR_STEPS = Object.freeze([
-  { shot: 'orbit', time: 5, title: 'Welcome to the honey garden', text: 'Help the hive collect 350 nectar in 3 minutes, together with 6 AI scouts.' },
+  { shot: 'orbit', time: 5, title: 'Welcome to the honey garden', text: 'Help the hive collect its nectar goal before time runs out, together with 6 AI scouts.' },
   { shot: 'chase', time: 5, title: 'Collect nectar', text: 'Fly into the glowing honey drops on the flowers. Your bag holds 8, and every 6 drops make your bee glow: its next boost is a power boost.' },
   { shot: 'bee', time: 5.5, title: 'Fly high and low', text: 'Flowers grow at three heights: SPACE climbs, C sinks. Press V to fly in bee view, like this.' },
   { shot: 'hive', time: 4.5, title: 'Deliver to the hive', text: 'Bring your nectar home through the glowing ring around the golden hive. Bigger loads score more points, but a heavy bee flies slower.' },

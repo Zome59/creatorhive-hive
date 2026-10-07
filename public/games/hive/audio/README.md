@@ -1,6 +1,6 @@
 # Honey Retrieval sound effects
 
-Nineteen short sound effects and loops (mono MP3, 44.1 kHz, 64 kbit/s, about 280 KiB together) and two background loops (stereo MP3, 96 and 128 kbit/s, 70 and 80 seconds, about 0.8 and 1.2 MiB, loaded only when played) for the garden game. They are loaded locally by `src/games/hive/features/audio/engine.js`; the game makes no external audio requests.
+Twenty-three short sound effects and loops (mono MP3, 44.1 kHz, 64 kbit/s, about 330 KiB together) and two background loops (stereo MP3, 96 and 128 kbit/s, 70 and 80 seconds, about 0.8 and 1.2 MiB, loaded only when played) for the garden game. They are loaded locally by `src/games/hive/features/audio/engine.js`; the game makes no external audio requests.
 
 ## Source
 
@@ -17,6 +17,8 @@ The raw clips were generated once, offline, with text-to-audio models through th
 | `alarm.mp3` | synthesized | Soft two-note “uh-oh” chime over the swelling bumblebee drone (warning) |
 | `dizzy.mp3`, `slurp.mp3` | Mirelo SFX 1.5 | Dizzy stars, the bumblebee drinking honey |
 | `rain.mp3`, `shake.mp3` | Mirelo SFX 1.5 | Rain from the little cloud over a soaked bee (loop), the bee shaking itself dry |
+| `wasp.mp3` | synthesized tone + Mirelo SFX 1.5 texture | The boss wasp's angry, pulsing drone loop (around 172 Hz) |
+| `slam.mp3`, `crunch.mp3`, `wasted.mp3` | Mirelo SFX 1.5 | Butt slam on the wasp's head, the hive smashed and honey gushing out, the dark boom when the round is wasted |
 | `brook.mp3` | Mirelo SFX 1.5 (a `music-meadow` brook layer) | Positioned brook loop (high-passed at 150 Hz); played slower and louder at the rim for the waterfall |
 | `music-meadow.mp3` | Mirelo SFX 1.5 layers, mixed locally | Default background, nature only: a soft, low-passed breeze-in-the-grass bed (no insects, no birds) chained from one clip played forwards and backwards, and a quiet brook that drifts in and out; a narrow cut at 5 kHz removes a faint insect tone and a gentle high cut tames the hiss (instead of a dull low-pass), high-passed at 160 Hz; a seamless 80-second loop |
 | `music-synthwave.mp3` | MiniMax Music 2.6 (instrumental) | Optional mellow synthwave, cut to a seamless 70-second loop |

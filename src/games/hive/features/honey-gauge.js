@@ -4,13 +4,14 @@ import * as THREE from 'three';
 // a cell filled mostly by the player glows orange, scout honey is gold. Delivered honey flies into
 // the next cell as droplets. The ledger keeps who brought each nectar, newest last (thieves drink
 // from the top).
-export const GAUGE = Object.freeze({ cells: 35, unit: 10, radius: 2.72, y: 0.36 }); // 35 cells × 10 = the 350-nectar goal
+export const GAUGE = Object.freeze({ cells: 45, unit: 10, radius: 2.8, y: 0.36 }); // 45 cells × 10 = the default 450-nectar goal
 const COLORS = Object.freeze({ empty: new THREE.Color('#4d3f27'), scouts: new THREE.Color('#f2b52a'), player: new THREE.Color('#ff7a1a') });
 
 export function createHoneyGauge({ cells = GAUGE.cells, unit = GAUGE.unit, radius = GAUGE.radius, y = GAUGE.y } = {}) {
+  const CELL = Math.min(1, 2 * Math.PI * radius / cells / 0.5); // cells shrink when more share the ring, so neighbours never overlap
   const group = new THREE.Group(), ledger = [], dummy = new THREE.Object3D(), color = new THREE.Color();
-  const comb = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.21, 0.21, 0.28, 6), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25, metalness: 0.05, emissive: '#3a2000', emissiveIntensity: 0.5 }), cells);
-  const rim = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.25, 0.12, 6, 1, true), new THREE.MeshStandardMaterial({ color: '#c99a43', roughness: 0.7, side: THREE.DoubleSide }), cells);
+  const comb = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.21 * CELL, 0.21 * CELL, 0.28, 6), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25, metalness: 0.05, emissive: '#3a2000', emissiveIntensity: 0.5 }), cells);
+  const rim = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25 * CELL, 0.25 * CELL, 0.12, 6, 1, true), new THREE.MeshStandardMaterial({ color: '#c99a43', roughness: 0.7, side: THREE.DoubleSide }), cells);
   const spot = i => { const a = i / cells * Math.PI * 2 + Math.PI / cells; return [Math.sin(a) * radius, Math.cos(a) * radius, a]; };
   for (let i = 0; i < cells; i++) {
     const [x, z, a] = spot(i);

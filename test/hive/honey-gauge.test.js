@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createHoneyGauge, GAUGE } from '../../src/games/hive/features/honey-gauge.js';
+import { RULES } from '../../src/games/hive/simulation.js';
 
 test('the honeycomb ring fills per 10 nectar, colours the player share, and empties from the top', () => {
   const gauge = createHoneyGauge(), at = new THREE.Vector3(5, 2, 5);
-  assert.equal(GAUGE.cells * GAUGE.unit, 350, 'the ring holds the round goal');
+  assert.equal(GAUGE.cells * GAUGE.unit, RULES.goal, 'the ring holds the round goal');
   gauge.deliver(at, 8, 'scouts'); gauge.deliver(at, 12, 'player'); gauge.deliver(at, 6, 'scouts');
   assert.equal(gauge.ledger.length, 26); assert.equal(gauge.player, 12);
   for (let i = 0; i < 60; i++) gauge.update(0.05, i * 0.05);

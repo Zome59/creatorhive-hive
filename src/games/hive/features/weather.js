@@ -2,28 +2,38 @@ import * as THREE from 'three';
 
 // Small, cheap effects around the player's bee: the rain cloud (after too many bumps) and the
 // energy rings that rise around it when a boost starts. The scene places both every frame.
-export function createRainCloud({ size = 2.6 } = {}) {
-  const group = new THREE.Group(), puff = new THREE.SphereGeometry(1, 16, 12);
-  const grey = new THREE.MeshStandardMaterial({ color: '#7d8796', roughness: 0.95 }), dark = new THREE.MeshStandardMaterial({ color: '#555f6e', roughness: 0.95 });
-  for (const [x, y, z, r, m] of [[0, 0, 0, 0.42, grey], [0.38, -0.05, 0.05, 0.32, grey], [-0.36, -0.04, -0.04, 0.3, grey], [0.1, 0.18, -0.12, 0.3, grey], [0, -0.16, 0, 0.36, dark]]) {
-    const ball = new THREE.Mesh(puff, m); ball.position.set(x, y, z); ball.scale.set(r * 1.25, r, r); group.add(ball);
+export function createRainCloud({ size = 1.7 } = {}) {
+  // A small, soft cumulus: many smooth puffs, lighter on top, a darker, flatter belly underneath.
+  const group = new THREE.Group(), puff = new THREE.SphereGeometry(1, 24, 16);
+  const light = new THREE.MeshStandardMaterial({ color: '#b3bbc8', roughness: 1 }), mid = new THREE.MeshStandardMaterial({ color: '#949dac', roughness: 1 }), dark = new THREE.MeshStandardMaterial({ color: '#6f7888', roughness: 1 });
+  for (const [x, y, z, r, m] of [
+    [-0.5, -0.04, 0.02, 0.24, mid], [-0.22, -0.06, 0.1, 0.3, mid], [0.12, -0.05, -0.06, 0.3, mid], [0.44, -0.03, 0.05, 0.25, mid],
+    [-0.3, 0.14, -0.02, 0.27, light], [0.02, 0.24, 0.03, 0.32, light], [0.3, 0.15, -0.05, 0.26, light], [-0.08, 0.1, -0.2, 0.25, light], [0.14, 0.08, 0.2, 0.24, light],
+    [-0.04, 0.38, -0.02, 0.19, light], [0, -0.12, 0, 0.5, dark],
+  ]) {
+    const ball = new THREE.Mesh(puff, m); ball.position.set(x, y, z); ball.scale.set(r * 1.18, m === dark ? r * 0.3 : r * 0.9, r * (m === dark ? 0.62 : 1)); ball.castShadow = false; group.add(ball);
   }
-  // Rain: thin streaks falling from the cloud to just below the bee, recycled in a loop.
-  const drops = 40, rain = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.02, 0.02, 0.24, 4), new THREE.MeshBasicMaterial({ color: '#9fd0ff', transparent: true, opacity: 0.85 }), drops);
+  // Rain: fine streaks falling from the cloud down past the bee, recycled in a loop.
+  const drops = 36, rain = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.011, 0.011, 0.2, 4), new THREE.MeshBasicMaterial({ color: '#a9d6ff', transparent: true, opacity: 0.8 }), drops);
   rain.frustumCulled = false; group.add(rain);
-  const seeds = Array.from({ length: drops }, (_, i) => ({ x: Math.sin(i * 12.9898) * 0.42, z: Math.cos(i * 78.233) * 0.32, t: (i * 0.618) % 1 }));
+  const seeds = Array.from({ length: drops }, (_, i) => ({ x: Math.sin(i * 12.9898) * 0.42, z: Math.cos(i * 78.233) * 0.3, t: (i * 0.618) % 1 }));
   const dummy = new THREE.Object3D();
-  let shown = 0;
+  // `lift` is how far above its spot the cloud floats: it sails down from high up when the rain starts and drifts
+  // back up when it ends. The scene sets the spot; this adds the lift on top.
+  let shown = 0, lift = 4.5;
   return {
     group,
     update(dt, elapsed, active) {
-      shown += ((active ? 1 : 0) - shown) * Math.min(1, dt * 5);
+      if (active && shown < 0.05) lift = 4.5;
+      lift += ((active ? 0 : 3) - lift) * Math.min(1, dt * (active ? 2.8 : 1.4));
+      shown += ((active ? 1 : 0) - shown) * Math.min(1, dt * (active ? 4 : 2.5));
       group.visible = shown > 0.02;
       if (!group.visible) return;
+      group.position.y += lift; const raining = active && lift < 0.6;
       group.scale.setScalar((0.4 + 0.6 * shown) * size); group.rotation.y = Math.sin(elapsed * 0.7) * 0.2;
       seeds.forEach((s, i) => {
         s.t = (s.t + dt * 2.2) % 1;
-        dummy.position.set(s.x, -0.25 - s.t * 1.6, s.z); dummy.scale.setScalar(active ? 1 : 0); dummy.updateMatrix(); rain.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(s.x, -0.2 - s.t * 1.7, s.z); dummy.scale.setScalar(raining ? 1 : 0); dummy.updateMatrix(); rain.setMatrixAt(i, dummy.matrix);
       });
       rain.instanceMatrix.needsUpdate = true;
     },

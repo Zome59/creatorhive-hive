@@ -50,3 +50,18 @@ test('speech bubbles follow their speaker on screen and expire', () => {
     assert.equal(layer.querySelector('b'), null, 'text is never parsed as HTML');
   } finally { if (previous === undefined) delete globalThis.document; else globalThis.document = previous; window.happyDOM.abort(); }
 });
+test('one speaker never shows two bubbles at once, even with delayed lines; the newest line wins and the old one can be read first', () => {
+  const window = new Window(), previous = globalThis.document; globalThis.document = window.document;
+  try {
+    const layer = document.createElement('div'), bubbles = createBubbles(layer);
+    const camera = new THREE.PerspectiveCamera(50, 2, 0.1, 100); camera.position.set(0, 0, 10); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+    const position = new THREE.Vector3(0, 0, 0), shown = () => [...layer.querySelectorAll('.bubble-anchor')].map(a => a.textContent);
+    bubbles.say('bumble', 'First!'); bubbles.update(0.05, camera, 800, 400, () => position);
+    bubbles.say('bumble', 'Second', { delay: 0.1 }); bubbles.say('bumble', 'Third', { delay: 0.3 }); bubbles.say('bumble', 'Newest', { delay: 0.2 });
+    let maxAtOnce = 0, sawFirstAfterRead = false;
+    for (let t = 0; t < 4; t += 0.05) { bubbles.update(0.05, camera, 800, 400, () => position); const now = shown(); maxAtOnce = Math.max(maxAtOnce, now.length); if (t > 1 && now[0] === 'First!') sawFirstAfterRead = true; if (now[0] === 'Newest') break; }
+    assert.equal(maxAtOnce, 1, 'never two bubbles for one speaker');
+    assert.deepEqual(shown(), ['Newest'], 'the newest waiting line replaced the older waiting ones');
+    assert.ok(sawFirstAfterRead, 'the first bubble stayed up long enough to read');
+  } finally { if (previous === undefined) delete globalThis.document; else globalThis.document = previous; window.happyDOM.abort(); }
+});

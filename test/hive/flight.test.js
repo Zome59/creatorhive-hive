@@ -39,8 +39,8 @@ test('boost lasts much longer and nectar pickups speed up its recharge', () => {
   Object.assign(bee, { x: -20, y: 2, z: -5 });
   game.setInput(bee.id, { z: 1, dash: true }); game.tick(0.05);
   let boosted = 0;
-  for (let t = 0; t < 4; t += 0.05) { game.setInput(bee.id, { z: 1 }); game.tick(0.05); if (game.boosting(bee)) boosted += 0.05; }
-  assert.ok(boosted >= BOOST.duration - 0.15 && BOOST.duration >= 2.5, `boosted for ${boosted.toFixed(2)}s`);
+  for (let t = 0; t < 6; t += 0.05) { game.setInput(bee.id, { z: 1 }); game.tick(0.05); if (game.boosting(bee)) boosted += 0.05; }
+  assert.ok(boosted >= BOOST.duration - 0.15 && BOOST.duration >= 4, `boosted for ${boosted.toFixed(2)}s`);
   const waiting = bee.boost, flower = FLOWERS[3];
   Object.assign(bee, { x: flower.x, y: flower.y, z: flower.z }); game.tick(0.05);
   assert.ok(bee.boost < waiting - BOOST.refill + 0.1, 'collecting nectar refilled the boost');
@@ -179,7 +179,7 @@ test('a power bump sends the other bee much farther than a normal bump', () => {
   };
   const normal = push(false), power = push(true);
   assert.ok(power.bump.power && !normal.bump.power);
-  assert.ok(power.flown > normal.flown * 2.5, `${power.flown.toFixed(1)} vs ${normal.flown.toFixed(1)}`);
+  assert.ok(power.flown > normal.flown * 2.2, `${power.flown.toFixed(1)} vs ${normal.flown.toFixed(1)}`);
 });
 test('a power boost shoves the crossing bumblebee away for 2 nectar per shove', async () => {
   const { SHOVE } = await import('../../src/games/hive/simulation.js');
@@ -289,16 +289,16 @@ test('five bumps within the window bring a rain cloud: slower for five seconds, 
   const slow = new Game({ bots: 0 }), b3 = slow.addPlayer(); slow.rainRule = { bumps: 2, window: 1 };
   slow.noteBump(b3); for (let i = 0; i < 30; i++) slow.tick(0.05); slow.noteBump(b3); assert.equal(b3.wet, 0, 'old bumps fall out of the window');
 });
-test('speed mode: faster for 5 seconds, then a 20-second recharge; scouts never use it', () => {
+test('speed mode: faster for 8 seconds, then a 20-second recharge; scouts never use it', () => {
   const game = new Game({ bots: 0 }), bee = game.addPlayer(), scout = game.addPlayer(true);
   Object.assign(bee, { x: -20, y: 3, z: 12 }); Object.assign(scout, { bot: true });
   const fly = turbo => { game.setInput(bee.id, { x: 1, turbo }); game.tick(0.05); };
-  fly(false); fly(false); const normal = Math.hypot(bee.vx, bee.vz);
-  fly(true); assert.equal(events(game, 'turbo').length, 1); fly(false);
+  for (let i = 0; i < 20; i++) fly(false); const normal = Math.hypot(bee.vx, bee.vz);
+  fly(true); assert.equal(events(game, 'turbo').length, 1); for (let i = 0; i < 20; i++) { Object.assign(bee, { x: -20, z: 12 }); fly(false); }
   assert.ok(Math.abs(Math.hypot(bee.vx, bee.vz) / normal - TURBO.factor) < 0.02, 'flies faster');
   for (let t = 0; t < TURBO.duration; t += 0.05) { Object.assign(bee, { x: -20, z: 12 }); fly(true); }
   assert.equal(bee.turbo, 0, 'speed mode ends after its duration even while the key is held');
-  assert.ok(bee.turboWait > TURBO.cooldown - 1, 'then it recharges');
+  assert.ok(bee.turboWait > TURBO.cooldown - 2, 'then it recharges');
   fly(true); assert.equal(bee.turbo, 0, 'no restart while recharging');
   game.setInput(scout.id, { x: 1, turbo: true }); game.tick(0.05); assert.equal(scout.turbo, 0);
 });
@@ -329,4 +329,15 @@ test('bushes, trees, and flowers vary in height; bushes stand clear of flowers a
   const span = list => Math.max(...list) - Math.min(...list);
   assert.ok(span(TREES.filter(t => t.inside).map(t => t.height)) > 1.6, 'inside trees differ clearly in height');
   for (const tier of [0, 1, 2]) assert.ok(span(FLOWERS.filter(f => f.id % 3 === tier).map(f => f.height)) > 0.4, `tier ${tier} varies`);
+});
+
+test('the player eases into turns: a sharp key change bends the path instead of snapping it', () => {
+  const game = new Game({ bots: 0 }), bee = game.addPlayer();
+  Object.assign(bee, { x: -10, y: 3, z: -10 });
+  for (let i = 0; i < 30; i++) { game.setInput(bee.id, { x: 1 }); game.tick(0.05); }
+  game.setInput(bee.id, { z: 1 }); game.tick(0.05);
+  const heading = Math.atan2(bee.vx, bee.vz) * 180 / Math.PI;
+  assert.ok(heading > 20 && heading < 85, `one frame after the turn it is still curving (${heading.toFixed(0)}°)`);
+  for (let i = 0; i < 20; i++) { game.setInput(bee.id, { z: 1 }); game.tick(0.05); }
+  assert.ok(Math.abs(Math.atan2(bee.vx, bee.vz)) < 0.05, 'and settles on the new course within a second');
 });

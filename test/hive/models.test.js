@@ -242,3 +242,11 @@ test('hive: same footprint as the old cylinder, entrance towards +Z, glowing rin
   const drips = named(group, 'drip'); update(0, 0); const lengths = drips.map(d => d.scale.y); update(3, 0); assert.ok(drips.some((d, i) => d.scale.y !== lengths[i]) && drips.every(d => d.scale.y >= 1 && d.scale.y <= 1.07 + 1e-9), 'drips stretch slowly');
   update(5, 0.5); assert.ok(finite(group));
 });
+
+test('pollen baskets on all six legs fill by load: hind pair, then middle, then front', async () => {
+  const { basketFills } = await import('../../src/games/hive/features/pollen.js');
+  assert.deepEqual(basketFills(0), [0, 0, 0]);
+  assert.deepEqual(basketFills(1 / 8).map(v => +v.toFixed(3)), [0.375, 0, 0], 'one drop: the hind pair starts');
+  assert.deepEqual(basketFills(4 / 8).map(v => +v.toFixed(3)), [1, 0.5, 0], 'half full: hind pair full, middle half');
+  assert.deepEqual(basketFills(1), [1, 1, 1], 'a full bag fills all six');
+});

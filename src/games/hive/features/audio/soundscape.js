@@ -24,7 +24,7 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
         const pitch = 0.9 + (bee.id * 0.137 % 0.25) + Math.min(speed, 13) / 40 + (game.boosting(bee) ? 0.1 : 0) + (bee.stun ? Math.sin(bee.stun * 18) * 0.08 : 0);
         keys.add(key);
         // Your own bee stays softly audible under everything.
-        audio.loop(key, 'buzz', { ...at(bee), spatial: !own, gain: own ? (beeView ? 0.55 : 0.4) : 1, rate: pitch, bus: own ? 'own' : 'bees' });
+        audio.loop(key, 'buzz', { ...at(bee), spatial: !own, gain: own ? (beeView ? 0.7 : 0.55) : 1, rate: pitch, bus: own ? 'own' : 'bees' });
         if (own || !player) continue;
         // "Bsss": a quick fly-by when a scout zips past close to the player.
         const d = Math.hypot(bee.x - player.x, bee.y - player.y, bee.z - player.z);
@@ -36,6 +36,9 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
       }
       // A soaked player hears the little cloud's rain right above.
       if (player?.wet) { keys.add('rain'); audio.loop('rain', 'rain', { spatial: false }); }
+      // The boss wasp's angry drone, positioned; calmer while it lies on its back.
+      const w = game.wasp;
+      if (w) { keys.add('wasp'); audio.loop('wasp', 'wasp', { x: w.x, y: w.y, z: w.z, gain: w.phase === 'onBack' ? 0.45 : 1, rate: w.phase === 'mobbed' ? 0.9 + Math.sin(clock * 7) * 0.06 : w.phase === 'onBack' ? 1.25 : 1 }); }
       const b = game.bumble;
       if (b) {
         keys.add('bumble');
@@ -60,6 +63,20 @@ export function createSoundscape(audio, { random = Math.random } = {}) {
         else if (event.type === 'bumble-shoved') { audio.play('crash', event, { rate: 0.85 }); audio.play('dizzy', event, { delay: 0.3, rate: 0.7 }); }
         else if (event.type === 'rain-end' && own) audio.play('shake');
         else if (event.type === 'turbo' && own) audio.play('boost', null, { rate: 1.25, gain: 0.8 });
+        else if (event.type === 'wasp-alarm') audio.play('alarm', null, { rate: 0.78 });
+        else if (event.type === 'wasp-hit') { audio.play('slam', event, { gain: 1 }); audio.play('crash', event, { rate: 1.3, gain: 0.5 }); }
+        else if (event.type === 'wasp-catch') audio.play('crash', event, { rate: 0.8, gain: 0.6 });
+        else if (event.type === 'wasp-ko') audio.play('dizzy', event);
+        else if (event.type === 'wasp-shake') audio.play('boost', event, { rate: 0.6, gain: 0.8 });
+        else if (event.type === 'swarm-gathered' || event.type === 'swarm-formation') audio.play('pass', null, { rate: 1.2, gain: 0.7 });
+        else if (event.type === 'swarm-charging') audio.play('boost', null, { rate: 0.9 });
+        else if (event.type === 'hive-collapse') audio.play('crunch', { x: 0, y: 2, z: 0 }, { gain: 1 });
+        else if (event.type === 'wasp-eat') audio.play('slurp', { x: 0, y: 1, z: 0 }, { rate: 0.7 });
+        else if (event.type === 'wasp-wasted') audio.play('wasted');
+        else if (event.type === 'wasp-bonus') audio.play('deliver', null, { rate: 0.8 });
+        else if (event.type === 'wasp-flee') { audio.play('deliver', null, { rate: 1 }); audio.play('deliver', null, { rate: 1.26, delay: 0.18 }); audio.play('deliver', null, { rate: 1.5, delay: 0.36 }); audio.play('pass', event, { rate: 0.6, gain: 0.8 }); } // a rising three-note fanfare and a whoosh
+        else if (event.type === 'bee-item-collect') { audio.play('collect', null, { rate: 1.35 }); audio.play('deliver', null, { rate: 1.5, gain: 0.5 }); }
+        else if (event.type === 'bee-reinforce') { audio.play('deliver', event, { rate: 1.15 }); audio.play('pass', event, { rate: 1.3, gain: 0.6, delay: 0.4 }); }
         else if (event.type === 'restore') audio.play('bump', event, { rate: 1.5, gain: 0.35 });
         else if (event.type === 'topple') { audio.play('crash', event, { rate: 0.85 }); audio.play('thud', event, { rate: 0.6, delay: 0.25 }); }
         else if (event.type === 'thud') audio.play('thud', event, { gain: Math.min(1, 0.45 + event.impact / 10) });
