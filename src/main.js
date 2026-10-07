@@ -10,7 +10,7 @@ import.meta.glob('./games/*/style.css', { eager: true });
 const games = Object.values(modules).sort((a, b) => a.order - b.order);
 const hexIcon = '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m16 2 12 7v14l-12 7-12-7V9Z" stroke="currentColor" stroke-width="2"/><path d="M11 10h10v3H11zm-2 6h14v3H9zm2 6h10v3H11Z" fill="currentColor"/></svg>';
 document.querySelector('#app').innerHTML = `
-  <header class="masthead"><a class="brand" href="/">${hexIcon}<span>The CreatorHive... Hive... The Game!</span></a>
+  <header class="masthead"><a class="brand" href="${import.meta.env?.BASE_URL ?? '/'}">${hexIcon}<span>The CreatorHive... Hive... The Game!</span></a>
     <nav aria-label="Games"></nav><button id="settings-button" class="global-settings" aria-label="Global settings" title="Global settings">⚙</button></header>
   <main><section class="arena"><div id="world"></div><div id="game-ui" class="mode-ui"></div><div id="toast" class="toast" role="status" aria-live="polite"></div></section><section id="controls" class="controls" aria-label="Game controls"></section></main>
   <dialog id="modal"><button id="close-modal" aria-label="Close dialog">×</button><div id="modal-content"></div></dialog>`;

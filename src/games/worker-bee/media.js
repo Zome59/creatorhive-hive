@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+// Served from public/media/ under the site's base path (also when hosted in a subfolder, e.g. GitHub Pages).
+const MEDIA = `${import.meta.env?.BASE_URL ?? '/'}media/`;
 export const MONITOR_CLIPS = ['pollen-flight', 'waggle-dance', 'honey-loop', 'flower-clock', 'nectar-run', 'hive-scan'];
 
 export function createMonitorMedia(screens, { random = Math.random } = {}) {
@@ -28,10 +30,10 @@ export function createMonitorMedia(screens, { random = Math.random } = {}) {
     });
     video.addEventListener('ended', () => {
       pool.clip = (pool.clip + 1 + Math.floor(random() * (MONITOR_CLIPS.length - 1))) % MONITOR_CLIPS.length; pool.needsSeek = true;
-      showPoster(); video.src = `/media/${MONITOR_CLIPS[pool.clip]}.mp4`;
+      showPoster(); video.src = `${MEDIA}${MONITOR_CLIPS[pool.clip]}.mp4`;
       if (active && !paused) video.play()?.catch(showPoster);
     });
-    video.src = `/media/${MONITOR_CLIPS[index]}.mp4`;
+    video.src = `${MEDIA}${MONITOR_CLIPS[index]}.mp4`;
     return pool;
   }
   function shuffledClips() {
@@ -53,7 +55,7 @@ export function createMonitorMedia(screens, { random = Math.random } = {}) {
       const order = shuffledClips();
       for (const [i, pool] of pools.entries()) {
         pool.clip = order[i]; pool.needsSeek = true;
-        pool.video.src = `/media/${MONITOR_CLIPS[pool.clip]}.mp4`;
+        pool.video.src = `${MEDIA}${MONITOR_CLIPS[pool.clip]}.mp4`;
         pool.screens.forEach(s => { s.material.map = posterTexture; s.material.needsUpdate = true; });
       }
     },
